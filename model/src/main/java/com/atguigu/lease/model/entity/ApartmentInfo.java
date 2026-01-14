@@ -65,4 +65,8 @@ public class ApartmentInfo extends BaseEntity {
     @TableField(value = "is_release")
     private ReleaseStatus isRelease;
 
+    @Schema(description = "房东id")
+    @TableField(value = "own_id")
+    private ReleaseStatus ownId;
+
 }
