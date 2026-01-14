@@ -1,6 +1,10 @@
 package com.atguigu.lease.web.admin.service.impl;
 
 import com.atguigu.lease.common.exception.LeaseException;
+import com.atguigu.lease.common.login.LoginUser;
+import com.atguigu.lease.common.login.LoginUserHolder;
+import com.atguigu.lease.common.login.SysLoginUser;
+import com.atguigu.lease.common.login.SysLoginUserHolder;
 import com.atguigu.lease.common.result.Result;
 import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.model.entity.*;
@@ -71,6 +75,8 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
     private CityInfoMapper cityInfoMapper;
     @Autowired
     private DistrictInfoMapper districtInfoMapper;
+    @Autowired
+    private SysLoginUserHolder sysLoginUserHolder;
 
     /**
      * 保存或更新公寓信息
@@ -185,7 +191,18 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
     public IPage<ApartmentItemVo> pageApartmentItemByQuery(IPage<ApartmentItemVo> page, ApartmentQueryVo queryVo) {
         //将查询封装的逻辑分配到sql语句中，即mapper的实现中。
         //因为这里采用了page对象，所以只需要按照正常逻辑写sql就行，分页语句会自动加上。
-        return apartmentInfoMapper.pageApartmentItemByQuery(page, queryVo);//直接传分页信息和地址信息。
+        SysLoginUser sysLoginUser = SysLoginUserHolder.getSysLoginUser();
+        if (sysLoginUser == null) {
+            throw new LeaseException(ResultCodeEnum.ADMIN_LOGIN_AUTH);
+        }
+
+        SysLoginUser loginUser = SysLoginUserHolder.getSysLoginUser();
+        Long userId = null;
+        if (loginUser.getType() == 1) {
+            userId = loginUser.getUserId();
+        }
+
+        return apartmentInfoMapper.pageApartmentItemByQuery(page, queryVo, userId);//直接传分页信息和地址信息。
     }
 
     /**
