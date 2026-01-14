@@ -2,10 +2,15 @@ package com.atguigu.lease.web.admin.custom.interceptor;
 
 import com.atguigu.lease.common.login.LoginUser;
 import com.atguigu.lease.common.login.LoginUserHolder;
+import com.atguigu.lease.common.login.SysLoginUser;
+import com.atguigu.lease.common.login.SysLoginUserHolder;
 import com.atguigu.lease.common.utils.JwtUtil;
+import com.atguigu.lease.model.entity.SystemUser;
+import com.atguigu.lease.web.admin.mapper.SystemUserMapper;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -14,6 +19,9 @@ import org.springframework.web.servlet.HandlerInterceptor;
  */
 @Component
 public class AuthenticationInterceptor implements HandlerInterceptor {
+
+    @Autowired
+    private SystemUserMapper systemUserMapper;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
@@ -26,8 +34,13 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         Long userId = claims.get("userId", Long.class);//从token中解析出userId
         String username = claims.get("username", String.class);//从token中解析出username
 
-        LoginUserHolder.setLoginUser(new LoginUser(userId, username));//将loginUser放入threadlocal中。
-
+        //查询用户表 区分类型
+        SystemUser systemUser = systemUserMapper.selectById(userId);
+        SysLoginUser sysLoginUser = new SysLoginUser();
+        sysLoginUser.setUsername(username);
+        sysLoginUser.setUserId(userId);
+        sysLoginUser.setType(sysLoginUser.getType());
+        SysLoginUserHolder.setSysLoginUser(sysLoginUser);
         // 放行。
         return true;
     }
@@ -36,6 +49,6 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
         //释放线程资源。
-        LoginUserHolder.clear();
+        SysLoginUserHolder.clear();
     }
 }
