@@ -6,6 +6,7 @@ import com.atguigu.lease.common.login.SysLoginUser;
 import com.atguigu.lease.common.login.SysLoginUserHolder;
 import com.atguigu.lease.common.utils.JwtUtil;
 import com.atguigu.lease.model.entity.SystemUser;
+import com.atguigu.lease.model.enums.SystemUserType;
 import com.atguigu.lease.web.admin.mapper.SystemUserMapper;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
@@ -39,7 +40,7 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         SysLoginUser sysLoginUser = new SysLoginUser();
         sysLoginUser.setUsername(username);
         sysLoginUser.setUserId(userId);
-        sysLoginUser.setType(sysLoginUser.getType());
+        sysLoginUser.setType(systemUser.getType());
         SysLoginUserHolder.setSysLoginUser(sysLoginUser);
         // 放行。
         return true;

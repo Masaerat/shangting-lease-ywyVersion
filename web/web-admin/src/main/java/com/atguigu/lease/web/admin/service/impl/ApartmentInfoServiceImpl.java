@@ -75,8 +75,6 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
     private CityInfoMapper cityInfoMapper;
     @Autowired
     private DistrictInfoMapper districtInfoMapper;
-    @Autowired
-    private SysLoginUserHolder sysLoginUserHolder;
 
     /**
      * 保存或更新公寓信息

@@ -34,7 +34,7 @@ public class SystemUser extends BaseEntity {
 
     @Schema(description = "用户类型")
     @TableField(value = "type")
-    private SystemUserType type;
+    private Long type;
 
     @Schema(description = "手机号码")
     @TableField(value = "phone")

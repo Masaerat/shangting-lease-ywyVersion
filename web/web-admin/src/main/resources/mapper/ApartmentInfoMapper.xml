@@ -48,8 +48,8 @@
                     <if test="queryVo.districtId != null">
                         and district_id=#{queryVo.districtId}
                     </if>
-                    <if test="ownerId != null">
-                        and owner_id = #{ownerId}
+                    <if test="userId != null">
+                        and own_id = #{userId}
                     </if>
                 </where>
               ) ai

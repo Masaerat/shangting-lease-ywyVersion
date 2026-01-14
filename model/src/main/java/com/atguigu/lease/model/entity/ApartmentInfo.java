@@ -67,6 +67,6 @@ public class ApartmentInfo extends BaseEntity {
 
     @Schema(description = "房东id")
     @TableField(value = "own_id")
-    private ReleaseStatus ownId;
+    private Long ownId;
 
 }
