@@ -85,6 +85,10 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
         //根据vo对象的id区分，有id是修改，无id是新增
         boolean isUpdate = apartmentSubmitVo.getId() != null;
 
+        SysLoginUser sysLoginUser = SysLoginUserHolder.getSysLoginUser();
+        Long userId = sysLoginUser.getUserId();
+        apartmentSubmitVo.setOwnId(userId);
+
         //bug修改，前端是根据xxxname来展示地址的，所以新增时，虽然传入了地址id，但没有具体的name。
         //根据省份id查询省份name
         LambdaQueryWrapper<ProvinceInfo> provinceQueryWrapper = new LambdaQueryWrapper<>();
