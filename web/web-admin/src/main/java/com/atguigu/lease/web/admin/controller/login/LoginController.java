@@ -2,6 +2,7 @@ package com.atguigu.lease.web.admin.controller.login;
 
 
 import com.atguigu.lease.common.login.LoginUserHolder;
+import com.atguigu.lease.common.login.SysLoginUserHolder;
 import com.atguigu.lease.common.result.Result;
 import com.atguigu.lease.web.admin.mapper.SystemUserMapper;
 import com.atguigu.lease.web.admin.service.LoginService;
@@ -42,7 +43,7 @@ public class LoginController {
     @GetMapping("info")
     public Result<SystemUserInfoVo> info() {
         //不需要从token中解析出id、username了，直接从threadlocal中获取loginUser即可。
-        Long userId = LoginUserHolder.getLoginUser().getUserId();
+        Long userId = SysLoginUserHolder.getSysLoginUser().getUserId();
         SystemUserInfoVo systemUserInfoVo = loginService.getLoginUserInfoById(userId);
         return Result.ok(systemUserInfoVo);
     }
