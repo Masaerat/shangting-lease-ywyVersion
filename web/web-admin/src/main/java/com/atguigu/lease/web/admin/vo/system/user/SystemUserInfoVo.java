@@ -14,4 +14,6 @@ public class SystemUserInfoVo {
     @Schema(description = "用户头像")
     private String avatarUrl;
 
+    @Schema(description = "用户类型")
+    private Long type;
 }
