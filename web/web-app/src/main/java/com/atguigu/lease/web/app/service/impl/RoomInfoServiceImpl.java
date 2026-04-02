@@ -1,6 +1,8 @@
 package com.atguigu.lease.web.app.service.impl;
 
+import com.atguigu.lease.common.constant.RedisConstant;
 import com.atguigu.lease.common.login.LoginUserHolder;
+import com.atguigu.lease.common.utils.CacheUtil;
 import com.atguigu.lease.model.entity.*;
 import com.atguigu.lease.model.enums.ItemType;
 import com.atguigu.lease.web.app.mapper.*;
@@ -18,12 +20,12 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.extern.slf4j.Slf4j;
-import org.checkerframework.checker.units.qual.A;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @author liubo
@@ -66,6 +68,9 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
     @Autowired
     private BrowsingHistoryService browsingHistoryService;
 
+    @Autowired
+    private CacheUtil cacheUtil;
+
     @Override
     public IPage<RoomItemVo> pageRoomItemByQuery(Page<RoomItemVo> page, RoomQueryVo queryVo) {
         return roomInfoMapper.pageRoomItemByQuery(page, queryVo);
@@ -79,29 +84,44 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
      */
     @Override
     public RoomDetailVo getDetailById(Long id) {
-        //1.查询房间信息
+        //1.构建缓存Key
+        String cacheKey = RedisConstant.APP_ROOM_DETAIL_PREFIX + id;
+
+        //2.查询缓存
+        RoomDetailVo cachedDetail = cacheUtil.get(cacheKey, RoomDetailVo.class);
+        if (cachedDetail != null) {
+            //缓存命中，保存浏览历史后返回
+            Long userId = LoginUserHolder.getLoginUser().getUserId();
+            browsingHistoryService.saveHistory(userId, id);
+            return cachedDetail;
+        }
+
+        //3.缓存未命中，查询数据库
+        //3.1查询房间信息
         RoomInfo roomInfo = roomInfoMapper.selectById(id);
         if (roomInfo == null) {
+            //防止缓存穿透：缓存空值
+            cacheUtil.set(cacheKey, null, RedisConstant.APP_ROOM_DETAIL_TTL_SEC, TimeUnit.SECONDS);
             return null;
         }
-        //2.查询图片
+        //3.2查询图片
         List<GraphVo> graphVoList = graphInfoMapper.selectListByItemTypeAndId(ItemType.ROOM, id);
-        //3.查询租期
+        //3.3查询租期
         List<LeaseTerm> leaseTermList = leaseTermMapper.selectListByRoomId(id);
-        //4.查询配套
+        //3.4查询配套
         List<FacilityInfo> facilityInfoList = facilityInfoMapper.selectListByRoomId(id);
-        //5.查询标签
+        //3.5查询标签
         List<LabelInfo> labelInfoList = labelInfoMapper.selectListByRoomId(id);
-        //6.查询支付方式
+        //3.6查询支付方式
         List<PaymentType> paymentTypeList = paymentTypeMapper.selectListByRoomId(id);
-        //7.查询基本属性
+        //3.7查询基本属性
         List<AttrValueVo> attrValueVoList = attrValueMapper.selectListByRoomId(id);
-        //8.查询杂费信息
+        //3.8查询杂费信息
         List<FeeValueVo> feeValueVoList = feeValueMapper.selectListByApartmentId(roomInfo.getApartmentId());
-        //9.查询公寓信息
-        ApartmentItemVo apartmentItemVo = apartmentInfoService.selectApartmentItemVoById(roomInfo.getApartmentId());//注意这里是apartmentItemVo
+        //3.9查询公寓信息
+        ApartmentItemVo apartmentItemVo = apartmentInfoService.selectApartmentItemVoById(roomInfo.getApartmentId());
 
-        //拼接roomDetailVo
+        //4.拼接roomDetailVo
         RoomDetailVo roomDetailVo = new RoomDetailVo();
         BeanUtils.copyProperties(roomInfo, roomDetailVo);
 
@@ -114,11 +134,12 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
         roomDetailVo.setFeeValueVoList(feeValueVoList);
         roomDetailVo.setLeaseTermList(leaseTermList);
 
+        //5.写入缓存
+        cacheUtil.set(cacheKey, roomDetailVo, RedisConstant.APP_ROOM_DETAIL_TTL_SEC, TimeUnit.SECONDS);
 
-        //注意：保存浏览历史的动作应该在浏览房间详情时触发，这里需要异步处理
-        //在SpringBoot中异步处理非常简单，在需要异步处理的方法上添加@Async注解，同时在SpringBoot启动类上@EnableAsync开启异步功能。
+        //6.保存浏览历史
         Long userId = LoginUserHolder.getLoginUser().getUserId();
-        browsingHistoryService.saveHistory(userId, id);//传入当前用户id和房间id
+        browsingHistoryService.saveHistory(userId, id);
 
         //返回房间详情
         return roomDetailVo;
