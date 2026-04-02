@@ -1,5 +1,7 @@
 package com.atguigu.lease.web.app.service.impl;
 
+import com.atguigu.lease.common.constant.RedisConstant;
+import com.atguigu.lease.common.utils.CacheUtil;
 import com.atguigu.lease.model.entity.ApartmentInfo;
 import com.atguigu.lease.model.entity.FacilityInfo;
 import com.atguigu.lease.model.entity.LabelInfo;
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @author liubo
@@ -42,25 +45,43 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
     @Autowired
     private FacilityInfoMapper facilityInfoMapper;
 
+    @Autowired
+    private CacheUtil cacheUtil;
+
     @Override
     public ApartmentItemVo selectApartmentItemVoById(Long id) {
-        // 查出apartmentInfo
+        //1.构建缓存Key
+        String cacheKey = RedisConstant.APP_APARTMENT_ITEM_PREFIX + id;
+
+        //2.查询缓存
+        ApartmentItemVo cachedItem = cacheUtil.get(cacheKey, ApartmentItemVo.class);
+        if (cachedItem != null) {
+            return cachedItem;
+        }
+
+        //3.缓存未命中，查询数据库
+        //3.1查出apartmentInfo
         ApartmentInfo apartmentInfo = apartmentInfoMapper.selectById(id);
+        if (apartmentInfo == null) {
+            //防止缓存穿透：缓存空值
+            cacheUtil.set(cacheKey, null, RedisConstant.APP_APARTMENT_ITEM_TTL_SEC, TimeUnit.SECONDS);
+            return null;
+        }
 
-        // 查出labelInfoList、graphVoList和minRent
+        //3.2查出labelInfoList、graphVoList和minRent
         List<LabelInfo> labelInfoList = labelInfoMapper.selectListByApartmentId(id);
-
         List<GraphVo> graphVoList = graphInfoMapper.selectListByItemTypeAndId(ItemType.APARTMENT, id);
+        BigDecimal minRent = roomInfoMapper.selectMinRentByApartmentId(id);
 
-        BigDecimal minRent = roomInfoMapper.selectMinRentByApartmentId(id);//返回值类型BigDecimal，用于货币，不会丢失精度。
-
-        // 拼接apartmentItemVo
+        //4.拼接apartmentItemVo
         ApartmentItemVo apartmentItemVo = new ApartmentItemVo();
         BeanUtils.copyProperties(apartmentInfo, apartmentItemVo);
-
         apartmentItemVo.setGraphVoList(graphVoList);
         apartmentItemVo.setLabelInfoList(labelInfoList);
         apartmentItemVo.setMinRent(minRent);
+
+        //5.写入缓存
+        cacheUtil.set(cacheKey, apartmentItemVo, RedisConstant.APP_APARTMENT_ITEM_TTL_SEC, TimeUnit.SECONDS);
 
         //返回apartmentItemVo
         return apartmentItemVo;
