@@ -1,5 +1,6 @@
 package com.atguigu.lease.web.admin.service.impl;
 
+import com.atguigu.lease.common.constant.RedisConstant;
 import com.atguigu.lease.model.entity.*;
 import com.atguigu.lease.model.enums.ItemType;
 import com.atguigu.lease.web.admin.mapper.*;
@@ -15,8 +16,10 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
+import com.atguigu.lease.common.utils.CacheUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -71,6 +74,10 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
 
     @Autowired
     private LeaseTermMapper leaseTermMapper;
+
+    @Autowired
+    private CacheUtil cacheUtil;
+
 
 
     /**
@@ -188,6 +195,11 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
                 roomLeaseTerms.add(roomLeaseTerm);
             }
             roomLeaseTermService.saveBatch(roomLeaseTerms);
+        }
+
+        //删除房间详情缓存
+        if (roomSubmitVo.getId() != null) {
+            cacheUtil.delete(RedisConstant.APP_ROOM_DETAIL_PREFIX + roomSubmitVo.getId());
         }
     }
 
