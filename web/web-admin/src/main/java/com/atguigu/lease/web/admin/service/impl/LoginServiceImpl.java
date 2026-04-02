@@ -4,6 +4,7 @@ import com.atguigu.lease.common.constant.RedisConstant;
 import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.common.utils.JwtUtil;
+import com.atguigu.lease.common.utils.CacheUtil;
 import com.atguigu.lease.model.entity.SystemUser;
 import com.atguigu.lease.model.enums.BaseStatus;
 import com.atguigu.lease.web.admin.mapper.SystemUserMapper;
@@ -16,7 +17,6 @@ import com.wf.captcha.SpecCaptcha;
 import com.wf.captcha.base.Captcha;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -27,7 +27,10 @@ import java.util.concurrent.TimeUnit;
 public class LoginServiceImpl implements LoginService {
 
     @Autowired
-    private StringRedisTemplate redisTemplate;
+    private CacheUtil cacheUtil;
+
+//    @Autowired
+//    private StringRedisTemplate redisTemplate;
 
     @Autowired
     private SystemUserMapper systemUserMapper;
@@ -41,7 +44,9 @@ public class LoginServiceImpl implements LoginService {
         //保存验证码uuid+code到redis中
         String code = specCaptcha.text().toLowerCase();//忽略大小写
         String key = RedisConstant.ADMIN_LOGIN_PREFIX + UUID.randomUUID();//根据规则拼接key
-        redisTemplate.opsForValue().set(key, code, RedisConstant.ADMIN_LOGIN_CAPTCHA_TTL_SEC, TimeUnit.SECONDS);//存入redis中，带有过期时间。
+        //同理
+//        redisTemplate.opsForValue().set(key, code, RedisConstant.ADMIN_LOGIN_CAPTCHA_TTL_SEC, TimeUnit.SECONDS);//存入redis中，带有过期时间。
+        cacheUtil.set(key, code, RedisConstant.ADMIN_LOGIN_CAPTCHA_TTL_SEC, TimeUnit.SECONDS);//存入redis中，带有过期时间。
 
         //构造vo并返回。
         String image = specCaptcha.toBase64();//对图片进行base64编码
@@ -56,7 +61,9 @@ public class LoginServiceImpl implements LoginService {
         }
 
         //2.校验验证码
-        String code = redisTemplate.opsForValue().get(loginVo.getCaptchaKey());//从redis中取key对应的验证码code
+        String code = cacheUtil.get(loginVo.getCaptchaKey(), String.class);//从redis中取key对应的验证码code
+        //用cacheUtil的方法完成了 本质上是一样的
+//        String code = redisTemplate.opsForValue().get(loginVo.getCaptchaKey());//从redis中取key对应的验证码code
         if (code == null) {
             throw new LeaseException(ResultCodeEnum.ADMIN_CAPTCHA_CODE_EXPIRED);//验证码过期（redis中没有key-code，说明已经过期。）
         }
