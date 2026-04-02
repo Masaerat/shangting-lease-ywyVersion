@@ -7,6 +7,8 @@ import com.atguigu.lease.common.login.SysLoginUser;
 import com.atguigu.lease.common.login.SysLoginUserHolder;
 import com.atguigu.lease.common.result.Result;
 import com.atguigu.lease.common.result.ResultCodeEnum;
+import com.atguigu.lease.common.constant.RedisConstant;
+import com.atguigu.lease.common.utils.CacheUtil;
 import com.atguigu.lease.model.entity.*;
 import com.atguigu.lease.model.enums.ItemType;
 
@@ -76,6 +78,9 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
     @Autowired
     private DistrictInfoMapper districtInfoMapper;
 
+    @Autowired
+    private CacheUtil cacheUtil;
+
     /**
      * 保存或更新公寓信息
      * @param apartmentSubmitVo
@@ -131,6 +136,10 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
             feeQueryWrapper.eq(ApartmentFeeValue::getApartmentId,apartmentSubmitVo.getId());
             apartmentFeeValueService.remove(feeQueryWrapper);
         }
+
+        //删除公寓信息缓存
+        cacheUtil.delete(RedisConstant.APP_APARTMENT_ITEM_PREFIX + apartmentSubmitVo.getId());
+
         //插入图片列表
         List<GraphVo> graphVoList = apartmentSubmitVo.getGraphVoList();//获取所有图片
         if (!CollectionUtils.isEmpty(graphVoList)){
