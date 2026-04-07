@@ -1,0 +1,147 @@
+package com.atguigu.lease.config;
+
+import org.springframework.amqp.core.*;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class RabbitMQConfig {
+
+    @Value("${spring.rabbitmq.host:localhost}")
+    private String host;
+
+    @Value("${spring.rabbitmq.port:5672}")
+    private int port;
+
+    @Value("${spring.rabbitmq.username:guest}")
+    private String username;
+
+    @Value("${spring.rabbitmq.password:guest}")
+    private String password;
+
+    @Value("${spring.rabbitmq.virtual-host:/}")
+    private String virtualHost;
+
+    // 主交换机
+    public static final String APPOINTMENT_EXCHANGE = "appointment.exchange";
+    public static final String DIRECT_EXCHANGE_TYPE = "direct";
+
+    // 队列名称
+    public static final String APPOINTMENT_CREATE_QUEUE = "appointment.create.queue";
+    public static final String APPOINTMENT_NOTIFY_QUEUE = "appointment.notify.queue";
+    public static final String APPOINTMENT_DLX_QUEUE = "appointment.dlx.queue";
+
+    // 死信交换机和队列
+    public static final String DLX_EXCHANGE = "dlx.exchange";
+    public static final String DLX_QUEUE = "appointment.dlx.queue";
+
+    // 路由键
+    public static final String CREATE_ROUTING_KEY = "view.appointment.create";
+    public static final String NOTIFY_ROUTING_KEY = "view.appointment.notify";
+    public static final String EXPIRE_ROUTING_KEY = "view.appointment.expire";
+    public static final String DLX_ROUTING_KEY = "appointment.dlx";
+
+    // TTL（毫秒）- 24小时
+    private static final long TTL_24_HOURS = 24 * 60 * 60 * 1000L;
+
+    /**
+     * 主交换机
+     */
+    @Bean
+    public DirectExchange appointmentExchange() {
+        return new DirectExchange(APPOINTMENT_EXCHANGE);
+    }
+
+    /**
+     * 死信交换机
+     */
+    @Bean
+    public DirectExchange dlxExchange() {
+        return new DirectExchange(DLX_EXCHANGE);
+    }
+
+    /**
+     * 预约创建队列（带死信交换机配置）
+     */
+    @Bean
+    public Queue appointmentCreateQueue() {
+        return QueueBuilder.durable(APPOINTMENT_CREATE_QUEUE)
+                .withArgument("x-dead-letter-exchange", DLX_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", DLX_ROUTING_KEY)
+                .withArgument("x-message-ttl", TTL_24_HOURS) // 24小时后过期
+                .build();
+    }
+
+    /**
+     * 通知队列
+     */
+    @Bean
+    public Queue appointmentNotifyQueue() {
+        return QueueBuilder.durable(APPOINTMENT_NOTIFY_QUEUE).build();
+    }
+
+    /**
+     * 死信队列
+     */
+    @Bean
+    public Queue dlxQueue() {
+        return QueueBuilder.durable(DLX_QUEUE).build();
+    }
+
+    /**
+     * 绑定：主交换机到创建队列
+     */
+    @Bean
+    public Binding createBinding() {
+        return BindingBuilder.bind(appointmentCreateQueue())
+                .to(appointmentExchange())
+                .with(CREATE_ROUTING_KEY);
+    }
+
+    /**
+     * 绑定：主交换机到通知队列
+     */
+    @Bean
+    public Binding notifyBinding() {
+        return BindingBuilder.bind(appointmentNotifyQueue())
+                .to(appointmentExchange())
+                .with(NOTIFY_ROUTING_KEY);
+    }
+
+    /**
+     * 绑定：死信交换机到死信队列
+     */
+    @Bean
+    public Binding dlxBinding() {
+        return BindingBuilder.bind(dlxQueue())
+                .to(dlxExchange())
+                .with(DLX_ROUTING_KEY);
+    }
+
+    /**
+     * 配置RabbitTemplate
+     */
+    @Bean
+    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+        RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
+        // 设置消息转换器
+        rabbitTemplate.setMessageConverter(new Jackson2JsonMessageConverter());
+        // 设置消息确认回调
+        rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -> {
+            if (ack) {
+                System.out.println("消息发送成功: " + correlationData.getId());
+            } else {
+                System.err.println("消息发送失败: " + cause);
+            }
+        });
+        // 设置返回回调
+        rabbitTemplate.setReturnsCallback(returned -> {
+            System.err.println("消息未送达队列: " + returned.getMessage());
+        });
+        return rabbitTemplate;
+    }
+}
