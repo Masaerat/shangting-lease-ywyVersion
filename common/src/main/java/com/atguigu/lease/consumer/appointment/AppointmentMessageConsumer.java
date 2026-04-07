@@ -63,20 +63,20 @@ public class AppointmentMessageConsumer {
             // 这里可以调用service层的方法更新预约状态为已取消
             System.out.println("自动取消预约: " + message.getAppointmentId());
 
-            // 发送取消通知
-            AppointmentNotificationMessage notificationMessage = AppointmentNotificationMessage.builder()
-                    .appointmentId(message.getAppointmentId())
-                    .userId(message.getUserId())
-                    .name(message.getName())
-                    .phone(message.getPhone())
-                    .apartmentId(message.getApartmentId())
-                    .appointmentTime(message.getAppointmentTime())
-                    .additionalInfo(message.getAdditionalInfo())
-                    .appointmentStatus("CANCELED")
-                    .notificationType("CANCEL")
-                    .messageContent("您的预约已因超时自动取消")
-                    .createTime(new Date())
-                    .build();
+                // 发送取消通知
+                AppointmentNotificationMessage notificationMessage = AppointmentNotificationMessage.builder()
+                        .appointmentId(message.getAppointmentId())
+                        .userId(message.getUserId())
+                        .name(message.getName())
+                        .phone(message.getPhone())
+                        .apartmentId(message.getApartmentId())
+                        .appointmentTime(message.getAppointmentTime())
+                        .additionalInfo(message.getAdditionalInfo())
+                        .appointmentStatus("CANCELED")
+                        .notificationType("CANCEL")
+                        .messageContent("您的预约已因超时自动取消")
+                        .createTime(new Date())
+                        .build();
 
             rabbitTemplate.convertAndSend("appointment.exchange", "view.appointment.notify", notificationMessage);
             System.out.println("已发送取消通知");
@@ -91,11 +91,21 @@ public class AppointmentMessageConsumer {
      * 发送确认短信
      */
     private void sendConfirmationSMS(AppointmentMessage message) {
-        // 这里集成阿里云短信服务
-        System.out.println("发送确认短信到: " + message.getPhone());
-        System.out.println("预约信息: " + message.getName() + " 预约时间: " + message.getAppointmentTime());
+        // 模拟发送短信
+        String smsContent = String.format(
+            "【租赁系统】%s您好，您的预约已成功确认！预约时间：%s，请准时到场。如有疑问请联系客服。",
+            message.getName(),
+            message.getAppointmentTime()
+        );
 
-        // 实际项目中这里调用短信服务API
-        // smsService.sendSMS(message.getPhone(), "您的预约已成功确认");
+        System.out.println("=====================================");
+        System.out.println("📱 短信发送中...");
+        System.out.println("📞 收件人: " + message.getPhone());
+        System.out.println("📄 内容: " + smsContent);
+        System.out.println("✅ 短信发送成功！");
+        System.out.println("=====================================");
+
+        // TODO: 集成阿里云短信服务
+        // smsService.sendSMS(message.getPhone(), smsContent);
     }
 }

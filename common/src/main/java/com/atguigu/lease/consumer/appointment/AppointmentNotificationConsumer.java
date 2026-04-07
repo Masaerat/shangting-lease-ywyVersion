@@ -40,41 +40,52 @@ public class AppointmentNotificationConsumer {
      * 处理创建通知
      */
     private void handleCreateNotification(AppointmentNotificationMessage message) {
-        System.out.println("处理创建通知 - 预约ID: " + message.getAppointmentId());
-        System.out.println("发送邮件通知给用户: " + message.getName());
-        System.out.println("通知内容: " + message.getMessageContent());
+        System.out.println("=====================================");
+        System.out.println("📧 处理创建通知");
+        System.out.println("📋 预约ID: " + message.getAppointmentId());
+        System.out.println("👤 用户: " + message.getName());
+        System.out.println("📱 手机: " + message.getPhone());
+        System.out.println("📅 预约时间: " + message.getAppointmentTime());
+        System.out.println("💬 通知内容: " + message.getMessageContent());
+        System.out.println("✅ 处理完成！");
+        System.out.println("=====================================");
 
-        // 实际项目中这里可以：
-        // 1. 发送邮件
-        // 2. 推送APP通知
-        // 3. 发送短信（如果需要）
+        // TODO: 集成邮件服务
+        // emailService.sendEmail(message.getEmail(), "预约成功通知", message.getMessageContent());
+
+        // TODO: 集成APP推送
+        // pushService.sendNotification(message.getUserId(), "预约成功", message.getMessageContent());
     }
 
     /**
      * 处理取消通知
      */
     private void handleCancelNotification(AppointmentNotificationMessage message) {
-        System.out.println("处理取消通知 - 预约ID: " + message.getAppointmentId());
-        System.out.println("用户: " + message.getName() + " 的预约已被取消");
-        System.out.println("取消原因: " + message.getMessageContent());
+        System.out.println("=====================================");
+        System.out.println("❌ 处理取消通知");
+        System.out.println("📋 预约ID: " + message.getAppointmentId());
+        System.out.println("👤 用户: " + message.getName());
+        System.out.println("📱 手机: " + message.getPhone());
+        System.out.println("💬 取消原因: " + message.getMessageContent());
+        System.out.println("✅ 处理完成！");
+        System.out.println("=====================================");
 
-        // 实际项目中这里可以：
-        // 1. 发送取消通知邮件
-        // 2. 推送取消通知
-        // 3. 记录取消日志
+        // TODO: 记录取消日志到数据库
+        // cancellationLogService.logCancellation(message.getAppointmentId(), message.getUserId(), message.getMessageContent());
     }
 
     /**
      * 处理更新通知
      */
     private void handleUpdateNotification(AppointmentNotificationMessage message) {
-        System.out.println("处理更新通知 - 预约ID: " + message.getAppointmentId());
-        System.out.println("预约状态已更新为: " + message.getAppointmentStatus());
-        System.out.println("更新时间: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-
-        // 实际项目中这里可以：
-        // 1. 发送状态变更通知
-        // 2. 更新相关系统数据
-        // 3. 通知相关人员
+        System.out.println("=====================================");
+        System.out.println("🔄 处理更新通知");
+        System.out.println("📋 预约ID: " + message.getAppointmentId());
+        System.out.println("👤 用户: " + message.getName());
+        System.out.println("📊 新状态: " + message.getAppointmentStatus());
+        System.out.println("📝 更新内容: " + message.getMessageContent());
+        System.out.println("⏰ 更新时间: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        System.out.println("✅ 处理完成！");
+        System.out.println("=====================================");
     }
 }
