@@ -2,6 +2,7 @@ package com.atguigu.lease.web.admin.controller.lease;
 
 
 import com.atguigu.lease.common.result.Result;
+import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.model.entity.ViewAppointment;
 import com.atguigu.lease.model.enums.AppointmentStatus;
 import com.atguigu.lease.web.admin.service.ViewAppointmentService;
@@ -35,13 +36,18 @@ public class ViewAppointmentController {
 
     @Operation(summary = "根据id更新预约状态")
     @PostMapping("updateStatusById")
-    public Result updateStatusById(@RequestParam Long id, @RequestParam AppointmentStatus status) {
-        //更新view_appointment记录里的appointment_status即可。
-        LambdaUpdateWrapper<ViewAppointment> updateWrapper = new LambdaUpdateWrapper<>();
-        updateWrapper.eq(ViewAppointment::getId, id);//看房预约表的id 这里对应where子句
-        updateWrapper.set(ViewAppointment::getAppointmentStatus, status);//看房预约表的status 这里对应set子句
-        viewAppointmentService.update(updateWrapper);
-        return Result.ok();
+    public Result updateStatusById(@RequestParam Long id, @RequestParam AppointmentStatus status, @RequestParam(defaultValue = "UPDATE") String operationType) {
+        // 使用新方法更新状态并发送消息
+        boolean success = viewAppointmentService.updateStatusWithMessage(id, status.name(), operationType);
+        return success ? Result.ok() : Result.fail(ResultCodeEnum.APP_APPOINTMENT_UPDATE_ERROR_ERROR.getCode(), "更新失败");
+    }
+
+    @Operation(summary = "新增预约（带消息发送）")
+    @PostMapping("save")
+    public Result save(@RequestBody ViewAppointment viewAppointment) {
+        // 使用新方法保存并发送消息
+        boolean success = viewAppointmentService.saveWithMessage(viewAppointment);
+        return success ? Result.ok() : Result.fail(ResultCodeEnum.APP_APPOINTMENT_SAVE_ERROR_ERROR.getCode(), "保存失败");
     }
 
 }

@@ -14,4 +14,14 @@ import com.baomidou.mybatisplus.extension.service.IService;
 public interface ViewAppointmentService extends IService<ViewAppointment> {
 
     IPage<AppointmentVo> pageAppointmentByQuery(IPage<AppointmentVo> page, AppointmentQueryVo queryVo);
+
+    /**
+     * 保存预约并发送消息
+     */
+    boolean saveWithMessage(ViewAppointment entity);
+
+    /**
+     * 更新预约状态并发送通知
+     */
+    boolean updateStatusWithMessage(Long id, String status, String operationType);
 }

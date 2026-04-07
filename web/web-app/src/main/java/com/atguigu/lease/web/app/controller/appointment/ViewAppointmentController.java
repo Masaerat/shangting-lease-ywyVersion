@@ -28,8 +28,11 @@ public class ViewAppointmentController {
     public Result saveOrUpdate(@RequestBody ViewAppointment viewAppointment) {
         Long userId = LoginUserHolder.getLoginUser().getUserId();
         viewAppointment.setUserId(userId);//设置当前用户id
-        viewAppointmentService.saveOrUpdate(viewAppointment);//保存或更新预约信息。
-        return Result.ok();
+        viewAppointment.setAppointmentStatus(AppointmentStatus.WAITING); // 新预约默认为待看房状态
+
+        // 保存并发送消息
+        boolean result = viewAppointmentService.saveWithMessage(viewAppointment);
+        return result ? Result.ok() : Result.fail("预约失败，请重试");
     }
 
     @Operation(summary = "查询个人预约看房列表")

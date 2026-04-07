@@ -16,4 +16,9 @@ public interface ViewAppointmentService extends IService<ViewAppointment> {
     List<AppointmentItemVo> listItemByUserId(Long userId);
 
     AppointmentDetailVo getDetailById(Long id);
+
+    /**
+     * 保存预约并发送消息
+     */
+    boolean saveWithMessage(ViewAppointment entity);
 }
