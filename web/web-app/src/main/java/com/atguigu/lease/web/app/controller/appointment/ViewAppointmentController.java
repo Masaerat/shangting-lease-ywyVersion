@@ -4,6 +4,7 @@ package com.atguigu.lease.web.app.controller.appointment;
 import com.atguigu.lease.common.login.LoginUserHolder;
 import com.atguigu.lease.common.result.Result;
 import com.atguigu.lease.model.entity.ViewAppointment;
+import com.atguigu.lease.model.enums.AppointmentStatus;
 import com.atguigu.lease.web.app.service.ViewAppointmentService;
 import com.atguigu.lease.web.app.vo.appointment.AppointmentDetailVo;
 import com.atguigu.lease.web.app.vo.appointment.AppointmentItemVo;
@@ -32,7 +33,7 @@ public class ViewAppointmentController {
 
         // 保存并发送消息
         boolean result = viewAppointmentService.saveWithMessage(viewAppointment);
-        return result ? Result.ok() : Result.fail("预约失败，请重试");
+        return result ? Result.ok() : Result.fail(001,"预约失败，请重试");
     }
 
     @Operation(summary = "查询个人预约看房列表")

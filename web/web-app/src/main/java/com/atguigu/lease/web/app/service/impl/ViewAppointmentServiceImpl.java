@@ -69,7 +69,7 @@ public class ViewAppointmentServiceImpl extends ServiceImpl<ViewAppointmentMappe
         boolean result = this.save(entity);
 
         if (result) {
-            // 发送预约创建消息（消费者会处理短信发送）
+            // 创建消息对象
             AppointmentMessage message = AppointmentMessage.builder()
                     .appointmentId(entity.getId())
                     .userId(entity.getUserId())
@@ -83,11 +83,13 @@ public class ViewAppointmentServiceImpl extends ServiceImpl<ViewAppointmentMappe
                     .createTime(new Date())
                     .build();
 
-            // 发送消息到队列（立即处理）
-            messageService.sendAppointmentCreateMessage(message);
-
-            // 发送延迟消息（24小时后自动取消）
-            messageService.sendDelayedCancelMessage(message);
+            try {
+                // 发送创建消息（用于通知）
+                messageService.sendAppointmentCreateMessage(message);
+            } catch (Exception e) {
+                // 如果消息发送失败，记录日志但不影响保存操作
+                System.err.println("消息发送失败，但预约已保存: " + e.getMessage());
+            }
         }
 
         return result;
