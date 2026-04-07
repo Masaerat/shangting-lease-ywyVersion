@@ -1,5 +1,7 @@
 package com.atguigu.lease.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -33,7 +35,6 @@ public class RabbitMQConfig {
     // 队列名称
     public static final String APPOINTMENT_CREATE_QUEUE = "appointment.create.queue";
     public static final String APPOINTMENT_NOTIFY_QUEUE = "appointment.notify.queue";
-    public static final String APPOINTMENT_DLX_QUEUE = "appointment.dlx.queue";
 
     // 死信交换机和队列
     public static final String DLX_EXCHANGE = "dlx.exchange";
@@ -45,8 +46,8 @@ public class RabbitMQConfig {
     public static final String EXPIRE_ROUTING_KEY = "view.appointment.expire";
     public static final String DLX_ROUTING_KEY = "appointment.dlx";
 
-    // TTL（毫秒）- 24小时
-    private static final long TTL_24_HOURS = 24 * 60 * 60 * 1000L;
+    // TTL（毫秒）- 2小时后发送提醒
+    public static final long TTL_2_HOURS = 2 * 60 * 60 * 1000L;
 
     /**
      * 主交换机
@@ -72,7 +73,7 @@ public class RabbitMQConfig {
         return QueueBuilder.durable(APPOINTMENT_CREATE_QUEUE)
                 .withArgument("x-dead-letter-exchange", DLX_EXCHANGE)
                 .withArgument("x-dead-letter-routing-key", DLX_ROUTING_KEY)
-                .withArgument("x-message-ttl", TTL_24_HOURS) // 24小时后过期
+                .withArgument("x-message-ttl", TTL_2_HOURS) // 2小时后过期
                 .build();
     }
 
@@ -122,26 +123,29 @@ public class RabbitMQConfig {
                 .with(DLX_ROUTING_KEY);
     }
 
-    /**
-     * 配置RabbitTemplate
-     */
-    @Bean
-    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
-        RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
-        // 设置消息转换器
-        rabbitTemplate.setMessageConverter(new Jackson2JsonMessageConverter());
-        // 设置消息确认回调
-        rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -> {
-            if (ack) {
-                System.out.println("消息发送成功: " + correlationData.getId());
-            } else {
-                System.err.println("消息发送失败: " + cause);
-            }
-        });
-        // 设置返回回调
-        rabbitTemplate.setReturnsCallback(returned -> {
-            System.err.println("消息未送达队列: " + returned.getMessage());
-        });
-        return rabbitTemplate;
-    }
+
+/**
+ * 配置RabbitTemplate
+ */
+@Bean
+public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+    RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
+    // 设置消息转换器
+    rabbitTemplate.setMessageConverter(new Jackson2JsonMessageConverter());
+    // 设置消息确认回调
+    rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -> {
+        Logger logger = LoggerFactory.getLogger(RabbitMQConfig.class);
+        if (ack) {
+            logger.info("消息发送成功: {}", correlationData.getId());
+        } else {
+            logger.error("消息发送失败: {}", cause);
+        }
+    });
+    // 设置返回回调
+    rabbitTemplate.setReturnsCallback(returned -> {
+        Logger logger = LoggerFactory.getLogger(RabbitMQConfig.class);
+        logger.error("消息未送达队列: {}", returned.getMessage());
+    });
+    return rabbitTemplate;
+}
 }
