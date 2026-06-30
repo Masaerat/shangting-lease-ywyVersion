@@ -18,22 +18,23 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.0.5</version>
+        <version>3.4.1</version>
     </parent>
 
     <!-- 注意：直接替换pom文件中原有的properties -->
     <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <java.version>21</java.version>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <mybatis-plus.version>3.5.3.1</mybatis-plus.version>
+        <mybatis-plus.version>3.5.9</mybatis-plus.version>
         <swagger.version>2.9.2</swagger.version>
         <jwt.version>0.11.2</jwt.version>
         <easycaptcha.version>1.6.2</easycaptcha.version>
         <minio.version>8.2.0</minio.version>
-        <knife4j.version>4.1.0</knife4j.version>
+        <knife4j.version>4.5.0</knife4j.version>
         <aliyun.sms.version>2.0.23</aliyun.sms.version>
-        <spring-amqp.version>3.1.2</spring-amqp.version>
+        <!-- spring-amqp 版本交给 Spring Boot 3.4 托管,不再手动覆盖 -->
     </properties>
 
     <!--配置dependencyManagement统一管理依赖版本-->
@@ -44,7 +45,7 @@
             <!--官方文档：https://baomidou.com/pages/bab2db/ -->
             <dependency>
                 <groupId>com.baomidou</groupId>
-                <artifactId>mybatis-plus-boot-starter</artifactId>
+                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
                 <version>${mybatis-plus.version}</version>
             </dependency>
 
