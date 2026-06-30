@@ -129,7 +129,7 @@ web-app/src/main/java/com/atguigu/lease/web/app/
 ├─ service/ai/
 │   └─ RentalChatService.java + Impl          SSE 编排:历史 → ChatClient.stream → 事件
 ├─ tools/RoomSearchTool.java                  Spring AI @Tool,硬过滤,走 MyBatis-Plus
-├─ config/ai/AiClientConfiguration.java       ChatModel/EmbeddingModel/ChatClient/Advisor
+├─ config/ai/ChatClientConfiguration.java     仅装配 ChatClient(挂 Advisor + Tool);底层 Model/VectorStore bean 来自 common
 └─ vo/ai/
     ├─ ChatRequestVo.java                     {message, conversationId}
     ├─ ChatSseEvent.java                      {type: message|tool|done|error, payload}
@@ -153,18 +153,36 @@ web-admin/src/main/java/com/atguigu/lease/web/admin/
     └─ UploadResultVo.java                    {docId, status, chunkCount}
 ```
 
-### 5.3 common(共享配置/常量)
+### 5.3 common + model(共享基础设施)
+
+共享的 AI bean 两个 app 都要用,**只写一份放 common**(沿用项目"共享设施放 common"的现有约定):
 
 ```
 common/src/main/java/com/atguigu/lease/
 ├─ config/ai/
-│   ├─ PgVectorDataSourceConfiguration.java   第二数据源 + JdbcTemplate + PgVectorStore bean
+│   ├─ AiModelConfiguration.java              OpenAiChatModel / OpenAiEmbeddingModel bean(读 spring.ai.openai.*)
+│   ├─ PgVectorDataSourceConfiguration.java   第二数据源 + JdbcTemplate + PgVectorStore bean(禁用自动配置,避免抢占 primary)
 │   └─ RagProperties.java                     @ConfigurationProperties("app.ai.rag")
 └─ constant/
     └─ AiRedisConstant.java                   会话历史 key 前缀 / TTL
+
+model/src/main/java/com/atguigu/lease/model/entity/
+└─ AiKnowledgeDoc.java                        文档元数据实体(@TableName("ai_knowledge_doc"))
 ```
 
-> 约定(沿用现有):`@RestController` 返回 `Result<T>`(非流式);SSE 端点返回 `SseEmitter`;`@Autowired` 字段注入;VO `@Data`+`@Schema`;实体放 `model` 模块;配置类放 `common` 或模块内 `config`。
+> 约定(沿用现有):`@RestController` 返回 `Result<T>`(非流式);SSE 端点返回 `SseEmitter`;`@Autowired` 字段注入;VO `@Data`+`@Schema`;实体放 `model` 模块;共享配置类放 `common`。
+
+### 5.4 类落位总表(最终)
+
+| 类 / 职责 | 落位 | 理由 |
+|---|---|---|
+| OpenAiChatModel / OpenAiEmbeddingModel | `common/config/ai/AiModelConfiguration` | 两 app 都用(chat 用、ingestion 用 embedding),只写一份 |
+| PgVectorStore + 第二数据源 + JdbcTemplate | `common/config/ai/PgVectorDataSourceConfiguration` | 同上,共享 |
+| `RagProperties`、`AiRedisConstant` | `common` | 共享配置/常量 |
+| `AiKnowledgeDoc` 实体 | `model`;Mapper 放 `web-admin` | 实体约定 |
+| ChatClient(挂 Advisor + Tool)装配 | `web-app/config/ai/ChatClientConfiguration` | 仅对话需要 |
+| 对话:AiChatController / RentalChatService / RoomSearchTool | `web-app` | C 端专属 |
+| 知识库:KnowledgeController / RoomKnowledgeService / DocumentKnowledgeService / KnowledgeManagementService / AiKnowledgeDocMapper | `web-admin` | 后台操作 + 房间变更源在此 |
 
 ---
 
