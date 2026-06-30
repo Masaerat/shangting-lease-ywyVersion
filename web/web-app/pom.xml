@@ -23,6 +23,12 @@
             <artifactId>common</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
+
+        <!-- Spring AI ChatClient.stream() 依赖响应式类型 Flux,Servlet 栈需引入 webflux -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
     </dependencies>
 
 </project>

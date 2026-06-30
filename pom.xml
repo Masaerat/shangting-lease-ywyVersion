@@ -41,6 +41,15 @@
     <!--注意：这里并没有引入依赖，只是指定依赖的版本，便于子模块依赖管理。-->
     <dependencyManagement>
         <dependencies>
+            <!-- Spring AI 1.0 GA BOM -->
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>1.0.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
             <!--mybatis-plus-->
             <!--官方文档：https://baomidou.com/pages/bab2db/ -->
             <dependency>
