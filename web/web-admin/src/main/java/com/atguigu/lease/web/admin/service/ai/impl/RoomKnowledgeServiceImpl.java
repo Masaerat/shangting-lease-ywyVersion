@@ -72,11 +72,17 @@ public class RoomKnowledgeServiceImpl implements RoomKnowledgeService {
         if (roomId == null) return;
         RoomInfo room = roomInfoService.getById(roomId);
         if (room == null) return;
-        // 先删该 roomRef 的旧向量
-        Expression del = new FilterExpressionBuilder().eq("roomRef", String.valueOf(roomId)).build();
-        vectorStore.delete(del);
+        // 先删该 roomRef 的旧向量(metadata 里 roomRef 存 Long,这里过滤值也用 Long 保持类型一致)
+        deleteRoomVectors(roomId);
         ApartmentInfo apt = room.getApartmentId() == null ? null : apartmentInfoService.getById(room.getApartmentId());
         vectorStore.add(List.of(toDocument(room, apt)));
+    }
+
+    @Override
+    public void deleteRoomVectors(Long roomId) {
+        if (roomId == null) return;
+        Expression del = new FilterExpressionBuilder().eq("roomRef", roomId).build();
+        vectorStore.delete(del);
     }
 
     @Override

@@ -10,4 +10,7 @@ public interface RoomKnowledgeService {
 
     /** 同步单个房源(删旧 + 重新入库) */
     void syncRoom(Long roomId);
+
+    /** 删除单个房源的全部向量(房间被删除时调用) */
+    void deleteRoomVectors(Long roomId);
 }

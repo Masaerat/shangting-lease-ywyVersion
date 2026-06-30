@@ -16,10 +16,12 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import com.atguigu.lease.common.utils.CacheUtil;
+import com.atguigu.lease.web.admin.service.ai.event.RoomChangedEvent;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -77,6 +79,9 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
 
     @Autowired
     private CacheUtil cacheUtil;
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
 
 
 
@@ -201,6 +206,11 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
         if (roomSubmitVo.getId() != null) {
             cacheUtil.delete(RedisConstant.APP_ROOM_DETAIL_PREFIX + roomSubmitVo.getId());
         }
+
+        //发布房源变更事件,异步同步向量库
+        if (roomSubmitVo.getId() != null) {
+            eventPublisher.publishEvent(new RoomChangedEvent(this, roomSubmitVo.getId(), RoomChangedEvent.Action.SAVE));
+        }
     }
 
     /**
@@ -264,6 +274,9 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
     public void removeRoomById(Long id) {
         //1.删除RoomInfo
         super.removeById(id);
+
+        //发布房源删除事件,异步清理向量库
+        eventPublisher.publishEvent(new RoomChangedEvent(this, id, RoomChangedEvent.Action.DELETE));
 
         //2.删除graphInfoList
         LambdaQueryWrapper<GraphInfo> graphQueryWrapper = new LambdaQueryWrapper<>();
