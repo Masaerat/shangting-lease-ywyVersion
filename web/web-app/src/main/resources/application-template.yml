@@ -36,6 +36,24 @@ spring:
     password: guest
     virtual-host: /
 
+  # Spring AI:OpenAI 兼容协议(GLM 等)+ pgvector 向量库
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.vectorstore.pgvector.PgVectorStoreAutoConfiguration
+  ai:
+    openai:
+      base-url: <你的AI_BASE_URL>          # 如 https://open.bigmodel.cn/api/paas/v4
+      api-key: <你的AI_API_KEY>
+      chat:
+        options:
+          model: <你的AI_CHAT_MODEL>        # 如 glm-4-flash
+      embedding:
+        options:
+          model: <你的AI_EMBED_MODEL>       # 如 embedding-3
+    vectorstore:
+      pgvector:
+        dimensions: <你的AI_EMBED_DIM>      # 与 embedding 模型一致(如 1024)
+
 # MyBatis-Plus
 mybatis-plus:
   mapper-locations: classpath*:mapper/*.xml
@@ -65,3 +83,21 @@ knife4j:
   enable: true
   setting:
     language: zh_cn
+
+# AI / RAG 业务参数 + 向量库第二数据源(PgVector);未配 app.datasource.pg.url 则相关 bean 不启用
+app:
+  datasource:
+    pg:
+      url: <你的PG_URL>                    # 如 jdbc:postgresql://localhost:5432/lease_vec
+      username: <你的PG_USER>
+      password: <你的PG_PASSWORD>
+  ai:
+    rag:
+      chunk-size: 800
+      min-chunk-size-chars: 350
+      min-chunk-length-to-embed: 5
+      max-num-chunks: 10000
+      top-k: 5
+      similarity-threshold: 0.75
+      history-turns: 10
+      namespace-default: default
