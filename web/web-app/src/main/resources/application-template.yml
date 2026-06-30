@@ -1,0 +1,67 @@
+# ============================================================
+# web-app (C 端) 配置模板 —— 请把尖括号 <...> 占位符替换为真实值
+# 仅有占位符的项不填会导致对应功能/启动失败(如 MySQL 密码)
+# ============================================================
+server:
+  port: 8081
+  servlet:
+    context-path: /
+
+spring:
+  # 升级 Spring Boot 3.4 后启用虚拟线程(SSE / IO 密集调用受益)
+  threads:
+    virtual:
+      enabled: true
+
+  # MySQL(主数据源,MyBatis-Plus 使用)
+  datasource:
+    url: jdbc:mysql://localhost:3306/lease?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf-8&allowPublicKeyRetrieval=true
+    username: root
+    password: <你的MySQL密码>
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # Redis(Boot 3 起前缀为 spring.data.redis;CacheUtil 用)
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      database: 0
+
+  # RabbitMQ(预约延迟队列用)
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+
+# MyBatis-Plus
+mybatis-plus:
+  mapper-locations: classpath*:mapper/*.xml
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    map-underscore-to-camel-case: true
+
+# MinIO 对象存储(图形/文件上传;未配 endpoint 则相关 bean 不启用)
+minio:
+  endpoint: http://localhost:9000
+  access-key: <你的MinIO AccessKey>
+  secret-key: <你的MinIO SecretKey>
+  bucket-name: lease
+
+# 阿里云短信(验证码发送)
+aliyun:
+  sms:
+    access-key-id: <你的阿里云 AccessKeyId>
+    access-key-secret: <你的阿里云 AccessKeySecret>
+    endpoint: dysmsapi.aliyuncs.com
+
+# Knife4j / OpenAPI 文档:访问 http://localhost:8081/doc.html
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
