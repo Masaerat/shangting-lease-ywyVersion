@@ -24,6 +24,13 @@
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
         </dependency>
 
+        <!--mybatis-plus 3.5.6+ 将分页等依赖 JSqlParser 的拦截器拆分到独立模块,需显式引入-->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
+
         <!--mysql驱动-->
         <dependency>
             <groupId>com.mysql</groupId>
