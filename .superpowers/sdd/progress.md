@@ -34,9 +34,23 @@ Build env prefix (每个 mvn/java 调用都要带):
 - [x] T12 SSE 对话服务 + 控制器 + 单测 3 passed — commit 42d627b
 - [x] T13 鉴权:`/app/ai/chat` 在 `/app/**` 拦截内,需登录(符合预期,无代码改动)— 见 commit d2de381 说明
 - [x] T14 yml 模板补 AI 段(两个 application-template.yml;字段对齐 RagProperties) — commit d2de381
-- [ ] T15 验证:`mvn clean compile` 全模块已绿(exit 0);三单测各跑过(RoomKnowledge 2 / DocumentKnowledge 1 / RentalChat 3)。**待办**:一次性合并复测 + `mvn clean package -DskipTests`(可选)。运行期验证(GLM key + pgvector)留用户。
+- [x] T15 验证(自动化部分,2026-07-01):
+  - `mvn clean compile` 全模块 BUILD SUCCESS(仅 Lombok 对老 VO 的无害 @EqualsAndHashCode 警告,非 AI 改动)。
+  - 三单测一次性合并复测全绿(DocumentKnowledge 1 / RoomKnowledge 2 / RentalChat 3)。
+    命令:`mvn test -Dtest='RoomKnowledgeServiceImplTest,DocumentKnowledgeServiceImplTest,RentalChatServiceImplTest' -Dsurefire.failIfNoSpecifiedTests=false -pl web/web-admin,web/web-app -am`
+- [ ] T15 运行期验证(留用户,需 Postgres+pgvector / MinIO / GLM key):见计划 T15 operator steps。
+  - 起 Postgres+pgvector,填 PG_URL/USER/PASSWORD + AI_*。
+  - `mvn -pl web/web-admin spring-boot:run` → 上传文档 → 确认 ai_knowledge_doc.status=INDEXED。
+  - 触发房源 reindex → 确认 vector_store 有 namespace=rooms 行。
+  - `mvn -pl web/web-app spring-boot:run` → curl SSE /app/ai/chat(带 access-token)→ 确认流式 + done+引用。
+
+## 环境路径(本机,2026-07-01)
+- JDK21:`/e/JDK/JDK21`(java 21.0.9 LTS)
+- Maven:`/e/Maven/apache-maven-3.8.6`
+- 旧的 `/d/SoftWare/...` 路径是另一台机器,本机用 `/e/...`。
+- 每次 mvn/java 调用前缀:`export JAVA_HOME="/e/JDK/JDK21"; export PATH="$JAVA_HOME/bin:/e/Maven/apache-maven-3.8.6/bin:$PATH"`
 
 ## 恢复指引(新会话/重启后)
 - 读本文件 + Plan 2 文档(`docs/superpowers/plans/2026-06-30-ai-rag-feature.md`)即可接上。
 - 已推送到 `origin/agentRag`,换机 `git pull` 即可。
-- 下一步:T15 收尾(可选的一次性复测);之后全是运行期验证,需要 Postgres+pgvector / MinIO / GLM key,见计划 T15 的 operator steps。
+- 代码侧 T1–T14 全部完成,编译+单测已验证;**剩下全是运行期验证**(需用户起 Postgres+pgvector / MinIO / GLM key)。
