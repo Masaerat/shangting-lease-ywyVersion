@@ -45,6 +45,11 @@ Build env prefix (每个 mvn/java 调用都要带):
     2. `spring.autoconfigure.exclude` 类名漏 `.autoconfigure` 子包 → 排除不生效,与手写 vectorStore bean 冲突。已改对(两份 yml + 两份模板)。
     3. `mybatis-plus.configuration.log-impl` 漏 `.logging`(我写 yml 时笔误)。已改对(模板本来是对的)。
   - 待验证:`/admin/ai/docs` 上传→INDEXED(证明 GLM embedding 通)、房源 reindex、web-app SSE 对话。admin 登录走验证码(Redis 明文 key=`admin:login:<uuid>`),可用 admin/MD5(123456) 脚本化登录。
+  - **运行期验证进展(2026-07-02)**:端到端链路逐段打通并修复多处环境/配置问题:
+    - Redis:web-admin yml 误填密码 123456,实际 Redis 无密码 → 改空。
+    - MinIO:签名不匹配 → 重启 MinIO 为 admin/admin12345,两份 yml 同步;`lease` 桶缺失 → mc 手动建。
+    - **GLM 路径 404(真 bug)**:Spring AI 自动配置把 base-url `.../paas/v4` + `/v1/embeddings` 拼成 `/v4/v1/embeddings` → 404。新增 `common/config/ai/AiModelConfiguration`:手动构建 OpenAiApi,completionsPath=`/chat/completions`、embeddingsPath=`/embeddings`(GLM 原生),chat/embedding 模型 bean 由它接管(自动配置 @ConditionalOnMissingBean 退避)。修复后错误从 404 路径错 → 429 余额不足,证明 URL 已对。
+    - **当前唯一阻塞(非代码)**:GLM 账号 embedding 余额不足(429 code 1113)。需用户去智谱控制台充值/领资源包后即可全链路通。
   - 起 Postgres+pgvector,填 PG_URL/USER/PASSWORD + AI_*。
   - `mvn -pl web/web-admin spring-boot:run` → 上传文档 → 确认 ai_knowledge_doc.status=INDEXED。
   - 触发房源 reindex → 确认 vector_store 有 namespace=rooms 行。
