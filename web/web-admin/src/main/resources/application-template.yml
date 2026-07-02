@@ -39,7 +39,7 @@ spring:
   # Spring AI:OpenAI 兼容协议(GLM 等)+ pgvector 向量库
   autoconfigure:
     exclude:
-      - org.springframework.ai.vectorstore.pgvector.PgVectorStoreAutoConfiguration
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
   ai:
     openai:
       base-url: <你的AI_BASE_URL>          # 如 https://open.bigmodel.cn/api/paas/v4

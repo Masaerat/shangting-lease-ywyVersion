@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.pgvector.PgVectorStore;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -65,7 +66,9 @@ public class PgVectorDataSourceConfiguration {
     }
 
     @Bean
-    public JdbcTemplate pgJdbcTemplate(DataSource pgDataSource) {
+    public JdbcTemplate pgJdbcTemplate(@Qualifier("pgDataSource") DataSource pgDataSource) {
+        // 必须用 @Qualifier 指定 pg 源:主数据源 dataSource 是 @Primary,
+        // 多候选时 Spring 会优先按 @Primary 注入(先于按参数名),否则会把 MySQL 注进来。
         return new JdbcTemplate(pgDataSource);
     }
 

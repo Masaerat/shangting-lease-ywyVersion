@@ -38,7 +38,13 @@ Build env prefix (每个 mvn/java 调用都要带):
   - `mvn clean compile` 全模块 BUILD SUCCESS(仅 Lombok 对老 VO 的无害 @EqualsAndHashCode 警告,非 AI 改动)。
   - 三单测一次性合并复测全绿(DocumentKnowledge 1 / RoomKnowledge 2 / RentalChat 3)。
     命令:`mvn test -Dtest='RoomKnowledgeServiceImplTest,DocumentKnowledgeServiceImplTest,RentalChatServiceImplTest' -Dsurefire.failIfNoSpecifiedTests=false -pl web/web-admin,web/web-app -am`
-- [ ] T15 运行期验证(留用户,需 Postgres+pgvector / MinIO / GLM key):见计划 T15 operator steps。
+- [ ] T15 运行期验证(进行中,2026-07-01~02):
+  - **环境已全部就绪**:MySQL8.0.41 / Redis / RabbitMQ / MinIO(9000)/ PostgreSQL16+pgvector 全部本机起好,各端口验证通过;pgvector 扩展已建。本机 JDK=`/e/JDK/JDK21`,Maven=`/e/Maven/apache-maven-3.8.6`。
+  - **web-admin 首次真实启动成功**(2026-07-02):MySQL / pg-vector-pool / RabbitMQ 全连上,`vector_store` 表自动建好。运行期暴露并修复 3 处问题:
+    1. **PgVectorDataSourceConfiguration 真 bug**:`pgJdbcTemplate(DataSource pgDataSource)` 因主源 `@Primary` 被注入了 MySQL 而非 PG,导致 `CREATE EXTENSION` 发到 MySQL。修复:参数加 `@Qualifier("pgDataSource")`。
+    2. `spring.autoconfigure.exclude` 类名漏 `.autoconfigure` 子包 → 排除不生效,与手写 vectorStore bean 冲突。已改对(两份 yml + 两份模板)。
+    3. `mybatis-plus.configuration.log-impl` 漏 `.logging`(我写 yml 时笔误)。已改对(模板本来是对的)。
+  - 待验证:`/admin/ai/docs` 上传→INDEXED(证明 GLM embedding 通)、房源 reindex、web-app SSE 对话。admin 登录走验证码(Redis 明文 key=`admin:login:<uuid>`),可用 admin/MD5(123456) 脚本化登录。
   - 起 Postgres+pgvector,填 PG_URL/USER/PASSWORD + AI_*。
   - `mvn -pl web/web-admin spring-boot:run` → 上传文档 → 确认 ai_knowledge_doc.status=INDEXED。
   - 触发房源 reindex → 确认 vector_store 有 namespace=rooms 行。
