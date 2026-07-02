@@ -50,6 +50,10 @@ Build env prefix (每个 mvn/java 调用都要带):
     - MinIO:签名不匹配 → 重启 MinIO 为 admin/admin12345,两份 yml 同步;`lease` 桶缺失 → mc 手动建。
     - **GLM 路径 404(真 bug)**:Spring AI 自动配置把 base-url `.../paas/v4` + `/v1/embeddings` 拼成 `/v4/v1/embeddings` → 404。新增 `common/config/ai/AiModelConfiguration`:手动构建 OpenAiApi,completionsPath=`/chat/completions`、embeddingsPath=`/embeddings`(GLM 原生),chat/embedding 模型 bean 由它接管(自动配置 @ConditionalOnMissingBean 退避)。修复后错误从 404 路径错 → 429 余额不足,证明 URL 已对。
     - **当前唯一阻塞(非代码)**:GLM 账号 embedding 余额不足(429 code 1113)。需用户去智谱控制台充值/领资源包后即可全链路通。
+  - **文档入库管线端到端跑通(2026-07-02 晚)**:上传→MinIO→DB→Tika解析→分片→GLM embedding→pgvector 全绿。`ai_knowledge_doc.status=INDEXED, chunk_count=1`;PG `vector_store` 1 行、embedding 维度 1024。又修了:
+    - **双 key 支持**:chat 与 embedding 用不同 API Key(均走 GLM 网关)。`AiModelConfiguration` 拆成 chatOpenAiApi / embeddingOpenAiApi 两个 OpenAiApi(@Qualifier 绑定);embedding key 读 `spring.ai.openai.embedding.api-key`,缺省回退主 key。用户用:chat=免费账号 key,embedding=有钱账号 key。
+    - **embedding 维度不匹配**:GLM embedding-3 默认返回 2048 维,pgvector 列是 1024 → INSERT 失败。`AiModelConfiguration` 给 OpenAiEmbeddingOptions 显式带 `dimensions`(默认 1024,对齐 pgvector)。
+    - `error_message` 列 VARCHAR(512) 太短,LLM 错误体超长触发截断级联 → 改 TEXT(DDL + 库已 ALTER)。
   - 起 Postgres+pgvector,填 PG_URL/USER/PASSWORD + AI_*。
   - `mvn -pl web/web-admin spring-boot:run` → 上传文档 → 确认 ai_knowledge_doc.status=INDEXED。
   - 触发房源 reindex → 确认 vector_store 有 namespace=rooms 行。

@@ -1,3 +1,4 @@
+
 -- AI 知识库文档元数据表(存于 MySQL 业务库,与 MyBatis-Plus 一起管理)
 -- 向量本身存于 PostgreSQL + pgvector(Spring AI PgVectorStore 自管的 vector_store 表)
 CREATE TABLE IF NOT EXISTS `ai_knowledge_doc` (
@@ -10,7 +11,7 @@ CREATE TABLE IF NOT EXISTS `ai_knowledge_doc` (
   `chunk_count`      INT          COMMENT '分片数',
   `minio_object_key` VARCHAR(255) COMMENT 'MinIO 对象 key',
   `minio_bucket`     VARCHAR(128) COMMENT 'MinIO 桶名',
-  `error_message`    VARCHAR(512) COMMENT '失败原因',
+  `error_message`    TEXT         COMMENT '失败原因(LLM/向量库错误体可能较长)',
   `create_time`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `is_deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除(0 否 1 是)',
