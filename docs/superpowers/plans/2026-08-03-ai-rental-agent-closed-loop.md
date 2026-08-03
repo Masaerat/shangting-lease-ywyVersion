@@ -1,173 +1,158 @@
-# 27公寓 AI 租房顾问闭环 Implementation Plan
+# 27公寓 agentRag 闭环 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 交付一个可通过 Docker Compose 复现的 AI 租房顾问，使租客能够从 H5 自然语言找房、检索租房知识、生成预约草稿、明确确认并在“我的预约”中看到唯一预约记录。
+**Goal:** 在 `agentRag` 已有企业级 RAG 和 SSE 对话能力上，补齐 Docker 可复现运行、无 Key 降级、登录、预约二次确认、Transactional Outbox、H5 展示和端到端验收。
 
-**Architecture:** 保持现有单体模块边界，在 `web-app` 内通过 Spring AI `ChatClient` 接入 GLM，并将房源查询、知识检索和预约确认拆成受控服务。模型只调用只读工具；预约写入采用 Redis 一次性令牌、MySQL 幂等记录和 Transactional Outbox。没有模型 Key 时使用同 DTO 的规则降级 Agent。
+**Architecture:** 保留现有 Java 21 / Spring Boot 3.4.1 / Spring AI 1.0.0、`AiModelConfiguration`、PGvector 第二数据源、Admin 文档/房源入库、`RoomSearchTool`、`RentalChatServiceImpl` 和 SSE 协议。新增模型与 fallback 两个聊天引擎；模型模式继续使用现有 ChatClient + VectorStore + Tool，fallback 模式使用 MySQL + 本地知识。预约写入通过 Redis 草稿令牌、MySQL 幂等记录和 Outbox 完成。
 
-**Tech Stack:** Java 21, Spring Boot 3.4.x, Spring AI 1.0.x, MyBatis-Plus, MySQL 8, Redis 7, RabbitMQ 3, PostgreSQL 16 + PGvector, MinIO, Flyway, Testcontainers, Vue 3, TypeScript, Vant, Vitest, Playwright, Docker Compose.
+**Tech Stack:** Java 21, Spring Boot 3.4.1, Spring AI 1.0.0, MyBatis-Plus 3.5.9, MySQL 8.4, Redis 7.4, RabbitMQ 3.13, PostgreSQL 16 + PGvector, MinIO, Vue 3, Vant, Vitest, Playwright, Docker Compose.
 
 ## Global Constraints
 
-- Java 基线必须为 21；Spring Boot 必须保持在 3.4.x；Spring AI 必须保持在 1.0.x。
-- 默认启动命令必须为 `docker compose up --build`，且空数据卷可完成整个演示流程。
-- GLM Key 只能从 `.env` 或环境变量读取；`.env` 必须被 Git 忽略，Git 只提交 `.env.example`。
-- 模型只能选择只读房源和知识工具；任何聊天文本都不能直接写预约。
-- 预约必须通过 10 分钟 TTL、绑定用户、单次消费的确认令牌创建，并支持幂等重放。
-- 预约和 Outbox 必须在同一 MySQL 事务落库；RabbitMQ 故障不能丢失预约事件。
-- 未配置 GLM 时必须返回 `mode=FALLBACK`，且登录、找房、知识问答和预约闭环仍可运行。
-- H5 源码纳入本仓库 `frontend/rent-house-h5`；原目录 `E:\frontend\rentHouseH5\rentHouseH5` 不修改。
-- 不修改 Admin 前端，不自动签约或支付，不提交真实用户数据。
-- 保留用户已有 `.idea/misc.xml` 修改；禁止使用 `git reset --hard`、`git checkout --` 或覆盖式回滚。
-- 每个生产行为遵循 RED -> GREEN -> REFACTOR；每个任务只提交列出的相关文件。
+- 只在 `agentRag` 分支实施；开始每个任务前运行 `git branch --show-current` 并确认输出为 `agentRag`。
+- 现有 `agentRag` 的 AI/RAG/Admin 实现是基线，不重新创建另一套 Agent、VectorStore 或知识管理服务。
+- 保留 Spring Boot 3.4.1、Spring AI 1.0.0 和现有 GLM 原生路径、双 Key、1024 维 embedding 配置，除非测试证明必须修改。
+- 默认命令为 `docker compose up --build`；空数据卷必须可完成 fallback 闭环。
+- `.env` 被 Git 忽略；只提交无秘密的 `.env.example` 和 `${ENV_VAR}` 配置。
+- SSE `POST /app/ai/chat` 保持兼容；模型模式和 fallback 模式使用相同事件结构。
+- 模型仅能调用现有只读 `RoomSearchTool`；聊天内容不能直接创建预约。
+- 预约必须经过 10 分钟一次性令牌和独立确认接口；重复确认返回同一预约。
+- 预约与 Outbox 同一 MySQL 事务提交；RabbitMQ 不可用时不丢事件。
+- H5 源码复制到本仓库 `frontend/rent-house-h5`，不修改原目录 `E:\frontend\rentHouseH5\rentHouseH5`。
+- 不修改 Admin 前端，不自动签约或支付，不提交真实数据。
+- 不暂存或提交用户已有 `.idea/misc.xml`；禁止 `git reset --hard` 和 `git checkout --`。
+- 每个行为执行 RED -> GREEN -> REFACTOR，并在任务末尾单独提交。
 
 ---
 
-### Task 1: 固定 Java 21 构建基线和可提交配置
+### Task 1: 审计现有 agentRag 基线并补齐可复现构建入口
 
 **Files:**
 - Create: `.mvn/wrapper/maven-wrapper.properties`
 - Create: `mvnw`
 - Create: `mvnw.cmd`
 - Create: `.env.example`
+- Create: `web/web-app/src/main/resources/application-docker.yml`
+- Create: `web/web-admin/src/main/resources/application-docker.yml`
 - Modify: `.gitignore`
-- Modify: `pom.xml`
-- Modify: `common/pom.xml`
-- Modify: `web/pom.xml`
-- Modify: `web/web-app/pom.xml`
-- Modify: `web/web-app/src/main/resources/application.yml`
-- Modify: `web/web-admin/src/main/resources/application.yml`
-- Test: `web/web-app/src/test/java/com/atguigu/lease/BuildBaselineTest.java`
+- Test: existing `RoomKnowledgeServiceImplTest`, `DocumentKnowledgeServiceImplTest`, `RentalChatServiceImplTest`
 
 **Interfaces:**
-- Produces: Java 21 Maven Wrapper build; `${MYSQL_*}`、`${REDIS_*}`、`${RABBITMQ_*}`、`${MINIO_*}`、`${GLM_*}`、`${PGVECTOR_*}` configuration contract.
+- Produces: Maven 3.9.9 Wrapper; `docker` Spring profile; environment contract for MySQL、Redis、RabbitMQ、MinIO、GLM and PGvector.
 
-- [ ] **Step 1: Record the current build failure**
-
-Run:
+- [ ] **Step 1: Verify branch and record baseline**
 
 ```powershell
-C:\Users\Administrator\.m2\wrapper\dists\apache-maven-3.9.16\0daed3be3ebd1c706f0e69e8b07c6b73f5cc4ea3dfce72a8d0ec2e849ca2ddb0\bin\mvn.cmd -pl web/web-app -am -DskipTests compile
+git branch --show-current
+.\mvnw.cmd -version  # expected to fail before wrapper exists
+C:\Users\Administrator\.m2\wrapper\dists\apache-maven-3.9.16\0daed3be3ebd1c706f0e69e8b07c6b73f5cc4ea3dfce72a8d0ec2e849ca2ddb0\bin\mvn.cmd clean compile
+C:\Users\Administrator\.m2\wrapper\dists\apache-maven-3.9.16\0daed3be3ebd1c706f0e69e8b07c6b73f5cc4ea3dfce72a8d0ec2e849ca2ddb0\bin\mvn.cmd test -Dtest=RoomKnowledgeServiceImplTest,DocumentKnowledgeServiceImplTest,RentalChatServiceImplTest -Dsurefire.failIfNoSpecifiedTests=false -pl web/web-admin,web/web-app -am
 ```
 
-Expected: FAIL under JDK 21 with the existing Lombok/Javac `JCTree$JCImport.qualid` incompatibility.
+Expected: branch is `agentRag`; wrapper command is RED; existing compile and six AI assertions remain GREEN.
 
-- [ ] **Step 2: Add a baseline context test**
-
-```java
-@SpringBootTest(properties = {
-    "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration,org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration"
-})
-class BuildBaselineTest {
-    @Test
-    void applicationContextLoadsOnJava21() {
-        assertThat(Runtime.version().feature()).isEqualTo(21);
-    }
-}
-```
-
-- [ ] **Step 3: Upgrade dependency management and add required starters**
-
-Set `java.version=21`, Spring Boot `3.4.12`, Spring AI BOM `1.0.3`, and add Actuator, Validation, Flyway MySQL, PostgreSQL JDBC, Spring AI OpenAI starter, Retry, Testcontainers, Awaitility and Mockito test dependencies. Retain MyBatis-Plus and existing API dependencies.
-
-- [ ] **Step 4: Generate Maven Wrapper and sanitize configuration**
-
-Run:
+- [ ] **Step 2: Generate Maven Wrapper**
 
 ```powershell
 C:\Users\Administrator\.m2\wrapper\dists\apache-maven-3.9.16\0daed3be3ebd1c706f0e69e8b07c6b73f5cc4ea3dfce72a8d0ec2e849ca2ddb0\bin\mvn.cmd wrapper:wrapper -Dmaven=3.9.9
 ```
 
-Track `application.yml` files and replace every credential with environment-backed defaults such as:
+- [ ] **Step 3: Add docker-profile configuration without touching local ignored config**
+
+Both `application-docker.yml` files use environment variables. The AI block keeps the existing property names:
 
 ```yaml
 spring:
   datasource:
-    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/lease?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf-8&allowPublicKeyRetrieval=true}
+    url: ${MYSQL_URL:jdbc:mysql://mysql:3306/lease?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
     username: ${MYSQL_USER:lease}
     password: ${MYSQL_PASSWORD:lease}
   ai:
     openai:
-      base-url: ${GLM_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
-      api-key: ${GLM_API_KEY:}
-      chat.options.model: ${GLM_CHAT_MODEL:glm-4-flash}
-management.endpoints.web.exposure.include: health,info
+      base-url: ${AI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
+      api-key: ${AI_CHAT_API_KEY:}
+      completions-path: /chat/completions
+      embeddings-path: /embeddings
+      embedding:
+        api-key: ${AI_EMBED_API_KEY:${AI_CHAT_API_KEY:}}
+        options:
+          model: ${AI_EMBED_MODEL:embedding-3}
+          dimensions: 1024
+app.datasource.pg:
+  url: ${PG_URL:jdbc:postgresql://pgvector:5432/lease_vec}
+  username: ${PG_USER:lease}
+  password: ${PG_PASSWORD:lease}
 ```
 
-`.env.example` contains variable names and demo defaults but `GLM_API_KEY=` remains empty. Before replacing the ignored local config, preserve the user's local key only in ignored `.env` and never print it.
+`.env.example` has demo infrastructure values and empty AI keys. Existing ignored `application.yml` files are not deleted or committed.
 
-- [ ] **Step 5: Verify GREEN**
-
-Run:
+- [ ] **Step 4: Verify GREEN**
 
 ```powershell
-.\mvnw.cmd -pl web/web-app -am -Dtest=BuildBaselineTest test
-.\mvnw.cmd -pl web/web-app -am -DskipTests package
+.\mvnw.cmd -version
+.\mvnw.cmd clean compile
+.\mvnw.cmd test -Dtest=RoomKnowledgeServiceImplTest,DocumentKnowledgeServiceImplTest,RentalChatServiceImplTest -Dsurefire.failIfNoSpecifiedTests=false -pl web/web-admin,web/web-app -am
+git diff --check
 ```
 
-Expected: both commands exit 0 on Java 21.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit only baseline files**
 
 ```powershell
-git add .mvn mvnw mvnw.cmd .env.example .gitignore pom.xml common/pom.xml web/pom.xml web/web-app/pom.xml web/web-app/src/main/resources/application.yml web/web-admin/src/main/resources/application.yml web/web-app/src/test/java/com/atguigu/lease/BuildBaselineTest.java
-git commit -m "build: upgrade rental platform to Java 21"
+git add .mvn mvnw mvnw.cmd .env.example .gitignore web/web-app/src/main/resources/application-docker.yml web/web-admin/src/main/resources/application-docker.yml
+git commit -m "build: add reproducible agentRag configuration"
 ```
 
-### Task 2: 固化 MySQL 迁移、演示数据和 PGvector 结构
+### Task 2: 固化 MySQL 迁移、演示数据和新增闭环表
 
 **Files:**
+- Modify: `pom.xml`
+- Modify: `common/pom.xml`
 - Create: `web/web-app/src/main/resources/db/migration/V1__lease_baseline.sql`
-- Create: `web/web-app/src/main/resources/db/migration/V2__ai_agent_tables.sql`
+- Create: `web/web-app/src/main/resources/db/migration/V2__agent_closed_loop.sql`
 - Create: `web/web-app/src/main/resources/db/migration/V3__demo_seed.sql`
-- Create: `db/pgvector/001-schema.sql`
-- Create: `db/pgvector/002-keyword-index.sql`
-- Modify: `db/ai-rental-agent/pgvector-schema.sql`
+- Create: `db/pgvector/001-init.sql`
 - Test: `web/web-app/src/test/java/com/atguigu/lease/migration/LeaseMigrationIT.java`
 
 **Interfaces:**
-- Produces: repeatable MySQL schema; demo user `13800000000`; six rooms; `ai_conversation`、`ai_message`、`ai_appointment_idempotency`、`appointment_event_outbox`; PGvector `ai_rental_knowledge_chunk`.
+- Produces: Flyway baseline for existing lease tables and `ai_knowledge_doc`; new `ai_appointment_idempotency` and `appointment_event_outbox`; six demo rooms and demo user `13800000000`.
 
-- [ ] **Step 1: Write the migration integration test**
+- [ ] **Step 1: Add Testcontainers migration test and run RED**
 
 ```java
 @Testcontainers(disabledWithoutDocker = true)
 class LeaseMigrationIT {
-    @Container static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.4")
+    @Container static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
         .withDatabaseName("lease").withUsername("lease").withPassword("lease");
 
     @Test
-    void emptyDatabaseMigratesAndContainsDemoInventory() {
-        Flyway.configure().dataSource(mysql.getJdbcUrl(), "lease", "lease").load().migrate();
-        assertThat(jdbc.queryForObject("select count(*) from room_info", Integer.class)).isEqualTo(6);
-        assertThat(jdbc.queryForObject("select count(*) from user_info where phone='13800000000'", Integer.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("select count(*) from appointment_event_outbox", Integer.class)).isZero();
+    void emptyDatabaseContainsDemoInventoryAndClosedLoopTables() {
+        Flyway.configure().dataSource(MYSQL.getJdbcUrl(), "lease", "lease").load().migrate();
+        assertThat(count("room_info")).isEqualTo(6);
+        assertThat(countWhere("user_info", "phone='13800000000'")).isEqualTo(1);
+        assertThat(count("ai_appointment_idempotency")).isZero();
+        assertThat(count("appointment_event_outbox")).isZero();
     }
 }
 ```
 
-- [ ] **Step 2: Run RED**
+Run:
 
 ```powershell
 .\mvnw.cmd -pl web/web-app -Dtest=LeaseMigrationIT test
 ```
 
-Expected: FAIL because migration resources and new tables do not exist.
+Expected: RED because Flyway dependencies/migrations are absent.
 
-- [ ] **Step 3: Capture and sanitize the existing schema**
-
-Use the local MySQL binary to export DDL only:
+- [ ] **Step 2: Export DDL only and sanitize it**
 
 ```powershell
 & 'C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe' --protocol=tcp --host=localhost --user=root --password=123456 --no-data --skip-comments --skip-dump-date --result-file='web\web-app\src\main\resources\db\migration\V1__lease_baseline.sql' lease
 ```
 
-Review the generated DDL and remove host-specific definers. `V3__demo_seed.sql` inserts only fabricated users, regions, apartments, rooms, labels, payment methods, images and one active lease that excludes one room from recommendations.
+Remove host definers and `CREATE DATABASE` statements. Keep the existing `ai_knowledge_doc` DDL consistent with `db/ai-rental-agent/ai_knowledge_doc.sql`.
 
-- [ ] **Step 4: Add new MySQL and PGvector tables**
-
-`V2__ai_agent_tables.sql` includes uniqueness and state columns, including:
+- [ ] **Step 3: Add closed-loop tables and fabricated seed data**
 
 ```sql
 create table ai_appointment_idempotency (
@@ -194,83 +179,73 @@ create table appointment_event_outbox (
 );
 ```
 
-PGvector uses `vector(1024)`, a unique `(source, content_checksum)` constraint, GIN keyword index and HNSW cosine index.
+`V3__demo_seed.sql` uses fixed IDs and `INSERT ... ON DUPLICATE KEY UPDATE` for two regions, three apartments, six rooms, labels, payment types, images, one unavailable room and one demo user. It contains no local user rows.
 
-- [ ] **Step 5: Verify GREEN and idempotency**
+- [ ] **Step 4: Verify GREEN and repeatability**
 
 ```powershell
 .\mvnw.cmd -pl web/web-app -Dtest=LeaseMigrationIT test
 .\mvnw.cmd -pl web/web-app -Dtest=LeaseMigrationIT test
 ```
-
-Expected: both runs pass; the second run does not duplicate seed rows.
-
-- [ ] **Step 6: Commit**
-
-```powershell
-git add web/web-app/src/main/resources/db db/pgvector db/ai-rental-agent/pgvector-schema.sql web/web-app/src/test/java/com/atguigu/lease/migration/LeaseMigrationIT.java
-git commit -m "feat: add reproducible lease demo data"
-```
-
-### Task 3: 增加 Docker Compose 与服务健康检查
-
-**Files:**
-- Create: `compose.yaml`
-- Create: `Dockerfile`
-- Create: `docker/minio/init.sh`
-- Create: `docker/minio/demo-room.jpg`
-- Create: `scripts/verify-compose.ps1`
-- Modify: `.dockerignore`
-- Test: `scripts/verify-compose.ps1`
-
-**Interfaces:**
-- Produces: services `mysql`, `redis`, `rabbitmq`, `pgvector`, `minio`, `minio-init`, `web-app`; health URL `http://localhost:8081/actuator/health`.
-
-- [ ] **Step 1: Write a failing compose verifier**
-
-```powershell
-$required = @('mysql','redis','rabbitmq','pgvector','minio','web-app')
-$services = docker compose config --services
-foreach ($name in $required) {
-  if ($services -notcontains $name) { throw "missing compose service: $name" }
-}
-$health = Invoke-RestMethod 'http://localhost:8081/actuator/health'
-if ($health.status -ne 'UP') { throw "web-app health is not UP" }
-```
-
-- [ ] **Step 2: Run RED**
-
-```powershell
-.\scripts\verify-compose.ps1
-```
-
-Expected: FAIL because `compose.yaml` does not exist.
-
-- [ ] **Step 3: Implement Compose and container image**
-
-Use pinned images `mysql:8.4`, `redis:7.4-alpine`, `rabbitmq:3.13-management-alpine`, `pgvector/pgvector:pg16`, and `minio/minio:RELEASE.2025-07-23T15-54-02Z`. Build backend with `maven:3.9.9-eclipse-temurin-21`, run with `eclipse-temurin:21-jre`, and gate `web-app` on healthy infrastructure.
-
-Compose passes the environment contract from Task 1 and mounts the PGvector scripts. MySQL schema remains owned by Flyway inside `web-app`.
-
-- [ ] **Step 4: Verify GREEN**
-
-```powershell
-docker compose config
-docker compose up -d --build mysql redis rabbitmq pgvector minio minio-init web-app
-.\scripts\verify-compose.ps1
-docker compose ps
-```
-
-Expected: verifier exits 0 and every long-running service is healthy.
 
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add compose.yaml Dockerfile .dockerignore docker/minio scripts/verify-compose.ps1
-git commit -m "build: add reproducible service stack"
+git add pom.xml common/pom.xml web/web-app/src/main/resources/db db/pgvector web/web-app/src/test/java/com/atguigu/lease/migration/LeaseMigrationIT.java
+git commit -m "feat: add reproducible agent demo database"
 ```
 
-### Task 4: 实现仅在 demo 环境启用的固定验证码登录
+### Task 3: 编排 MySQL、Redis、RabbitMQ、MinIO、PGvector、Admin 和 App
+
+**Files:**
+- Create: `compose.yaml`
+- Create: `Dockerfile`
+- Create: `.dockerignore`
+- Create: `docker/minio/init.sh`
+- Create: `docker/minio/demo-room.jpg`
+- Create: `scripts/verify-compose.ps1`
+- Test: `scripts/verify-compose.ps1`
+
+**Interfaces:**
+- Produces: services `mysql`, `redis`, `rabbitmq`, `pgvector`, `minio`, `minio-init`, `web-admin`, `web-app`; Actuator health on ports 8080 and 8081.
+
+- [ ] **Step 1: Write verifier and run RED**
+
+```powershell
+$required = @('mysql','redis','rabbitmq','pgvector','minio','web-admin','web-app')
+$services = docker compose config --services
+foreach ($name in $required) { if ($services -notcontains $name) { throw "missing: $name" } }
+foreach ($port in 8080,8081) {
+  $health = Invoke-RestMethod "http://localhost:$port/actuator/health"
+  if ($health.status -ne 'UP') { throw "port $port is not UP" }
+}
+```
+
+Expected: RED because Compose does not exist.
+
+- [ ] **Step 2: Add pinned images and multi-module Java image**
+
+Use `mysql:8.4`, `redis:7.4-alpine`, `rabbitmq:3.13-management-alpine`, `pgvector/pgvector:pg16`, MinIO pinned release, `maven:3.9.9-eclipse-temurin-21` builder and `eclipse-temurin:21-jre` runtime. Build `web-admin` and `web-app` separately from one Dockerfile `APP_MODULE` argument.
+
+`web-app` and `web-admin` run with `SPRING_PROFILES_ACTIVE=docker`; infrastructure services have real health checks and application services wait for healthy dependencies.
+
+- [ ] **Step 3: Verify GREEN**
+
+```powershell
+docker compose config
+docker compose up -d --build mysql redis rabbitmq pgvector minio minio-init web-admin web-app
+.\scripts\verify-compose.ps1
+docker compose ps
+```
+
+- [ ] **Step 4: Commit**
+
+```powershell
+git add compose.yaml Dockerfile .dockerignore docker scripts/verify-compose.ps1
+git commit -m "build: containerize agentRag services"
+```
+
+### Task 4: 增加隔离的 demo 固定验证码登录
 
 **Files:**
 - Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/config/DemoLoginProperties.java`
@@ -278,25 +253,25 @@ git commit -m "build: add reproducible service stack"
 - Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/impl/RedisVerificationCodeService.java`
 - Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/impl/DemoVerificationCodeService.java`
 - Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/impl/LoginServiceImpl.java`
-- Modify: `web/web-app/src/main/resources/application.yml`
+- Modify: `web/web-app/src/main/resources/application-docker.yml`
 - Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/impl/DemoVerificationCodeServiceTest.java`
 - Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/impl/LoginServiceImplTest.java`
 
 **Interfaces:**
-- Produces: `VerificationCodeService.issue(String phone)` and `VerificationCodeService.verify(String phone, String code)`.
+- Produces: `VerificationCodeService.issue(phone)` and `verify(phone, code)`; demo phone `13800000000`, code `888888` only when `app.demo-login.enabled=true`.
 
 - [ ] **Step 1: Write RED tests**
 
 ```java
 @Test
-void acceptsFixedCodeOnlyForConfiguredDemoPhone() {
+void fixedCodeIsLimitedToConfiguredDemoPhone() {
     var service = new DemoVerificationCodeService("13800000000", "888888");
     assertThat(service.verify("13800000000", "888888")).isTrue();
     assertThat(service.verify("13900000000", "888888")).isFalse();
 }
 ```
 
-Also assert `RedisVerificationCodeService` remains the selected bean when `app.demo-login.enabled=false`.
+Also load Spring context twice and assert demo bean is selected only when the property is true.
 
 - [ ] **Step 2: Run RED**
 
@@ -304,13 +279,11 @@ Also assert `RedisVerificationCodeService` remains the selected bean when `app.d
 .\mvnw.cmd -pl web/web-app -Dtest=DemoVerificationCodeServiceTest,LoginServiceImplTest test
 ```
 
-Expected: FAIL because the verification abstraction does not exist.
+- [ ] **Step 3: Implement strategy injection**
 
-- [ ] **Step 3: Implement and inject the strategy**
+Move Redis/SMS issue and verify behavior out of `LoginServiceImpl`. Use conditional beans; non-demo behavior remains unchanged.
 
-Use `@ConditionalOnProperty(name="app.demo-login.enabled", havingValue="true")` for demo and `matchIfMissing=true` inverse condition for Redis/SMS. `LoginServiceImpl` no longer reads Redis directly for validation.
-
-- [ ] **Step 4: Verify GREEN and regression**
+- [ ] **Step 4: Verify GREEN and SMS regression**
 
 ```powershell
 .\mvnw.cmd -pl web/web-app -Dtest=DemoVerificationCodeServiceTest,LoginServiceImplTest,SmsServiceImplTest test
@@ -319,197 +292,78 @@ Use `@ConditionalOnProperty(name="app.demo-login.enabled", havingValue="true")` 
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add web/web-app/src/main/java/com/atguigu/lease/web/app/config web/web-app/src/main/java/com/atguigu/lease/web/app/service web/web-app/src/test/java/com/atguigu/lease/web/app/service web/web-app/src/main/resources/application.yml
-git commit -m "feat: add isolated demo login mode"
+git add web/web-app/src/main/java/com/atguigu/lease/web/app/config/DemoLoginProperties.java web/web-app/src/main/java/com/atguigu/lease/web/app/service/VerificationCodeService.java web/web-app/src/main/java/com/atguigu/lease/web/app/service/impl web/web-app/src/main/resources/application-docker.yml web/web-app/src/test/java/com/atguigu/lease/web/app/service/impl
+git commit -m "feat: add docker-only demo login"
 ```
 
-### Task 5: 建立 RAG 文档、切片、PGvector 检索和关键词降级
+### Task 5: 让现有 SSE Agent 支持无 Key 启动、fallback 和用户隔离
 
 **Files:**
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/knowledge/KnowledgeDocumentLoader.java`
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/knowledge/KnowledgeChunker.java`
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/knowledge/PgVectorKnowledgeRepository.java`
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/knowledge/KeywordKnowledgeRetriever.java`
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/knowledge/HybridRentalKnowledgeService.java`
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/config/PgVectorDataSourceConfiguration.java`
-- Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/RentalKnowledgeService.java`
-- Remove: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/impl/InMemoryRentalKnowledgeService.java`
-- Modify: `docs/ai-rental-agent/rag-knowledge.md`
-- Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/knowledge/KnowledgeChunkerTest.java`
-- Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/knowledge/HybridRentalKnowledgeServiceTest.java`
-- Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/knowledge/PgVectorKnowledgeRepositoryIT.java`
+- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/RentalChatEngine.java`
+- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/impl/ModelRentalChatEngine.java`
+- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/impl/FallbackRentalChatEngine.java`
+- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/impl/LocalRentalKnowledgeService.java`
+- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai/AiRecommendationVo.java`
+- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai/AiChatMetaVo.java`
+- Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/impl/RentalChatServiceImpl.java`
+- Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai/ChatSseEvent.java`
+- Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/tools/RoomSearchTool.java`
+- Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/config/ai/ChatClientConfiguration.java`
+- Modify: `common/src/main/java/com/atguigu/lease/config/ai/PgVectorDataSourceConfiguration.java`
+- Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/impl/FallbackRentalChatEngineTest.java`
+- Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/impl/RentalChatServiceImplTest.java`
 
 **Interfaces:**
-- Produces: `List<RentalKnowledgeChunk> search(String query, int limit)`; idempotent `indexChangedDocuments()`.
+- Produces: `RentalChatEngine.mode()` and `chat(ChatExecution execution, Consumer<ChatSseEvent> sink)`; SSE types `meta`, `message`, `recommendations`, `citations`, `done`, `error`.
 
-- [ ] **Step 1: Write RED tests for heading-aware chunks and fallback**
+- [ ] **Step 1: Write RED fallback and isolation tests**
 
 ```java
 @Test
-void preservesSourceAndHeadingWhenChunkingMarkdown() {
-    List<RentalKnowledgeChunk> chunks = chunker.chunk("deposit.md", "# 押金\n退租验收后按合同退还。", 200);
-    assertThat(chunks).singleElement().satisfies(chunk -> {
-        assertThat(chunk.getTitle()).isEqualTo("押金");
-        assertThat(chunk.getSource()).isEqualTo("deposit.md");
-        assertThat(chunk.getContent()).contains("退租验收");
-    });
+void missingModelUsesFallbackAndStillReturnsRoomsAndKnowledge() {
+    ChatCapture capture = service.chat(userId, new ChatRequestVo("conv-1", "预算2500并说明押金"));
+    assertThat(capture.event("meta").payload()).extracting("mode").isEqualTo("FALLBACK");
+    assertThat(capture.event("recommendations").payload()).asList().isNotEmpty();
+    assertThat(capture.event("citations").payload()).asList().isNotEmpty();
 }
 
 @Test
-void fallsBackToKeywordRetrieverWhenVectorSearchFails() {
-    when(vector.search("押金怎么退", 3)).thenThrow(new DataAccessResourceFailureException("pg down"));
-    assertThat(service.search("押金怎么退", 3)).extracting(RentalKnowledgeChunk::getTitle).contains("押金与退还");
+void sameConversationIdUsesDifferentRedisKeysForDifferentUsers() {
+    assertThat(service.historyKey(1L, "same")).isNotEqualTo(service.historyKey(2L, "same"));
 }
 ```
 
 - [ ] **Step 2: Run RED**
 
 ```powershell
-.\mvnw.cmd -pl web/web-app -Dtest=KnowledgeChunkerTest,HybridRentalKnowledgeServiceTest test
+.\mvnw.cmd -pl web/web-app -Dtest=FallbackRentalChatEngineTest,RentalChatServiceImplTest test
 ```
 
-- [ ] **Step 3: Implement checksum-based ingestion and retrieval**
+- [ ] **Step 3: Extract existing model logic without changing its behavior**
 
-Use SHA-256 over normalized source/title/content, `ON CONFLICT (source, content_checksum) DO UPDATE`, 1024-dimensional embeddings, top-k bounded to 10, and a configurable similarity threshold. The keyword retriever loads the same Markdown source and returns the same citation DTO.
+Move current `VectorStore.similaritySearch`、prompt assembly、`ChatClient.stream()` and citations into `ModelRentalChatEngine`. Keep `RoomSearchTool` registered in `ChatClientConfiguration`. Make model/vector beans conditional on nonblank AI keys and PG URL.
 
-- [ ] **Step 4: Verify unit and PGvector integration tests**
+- [ ] **Step 4: Implement fallback**
+
+Fallback parses min/max rent and city/district keywords, calls the existing MySQL room query path, retrieves deposit/payment/appointment/repair/checkout sections from `docs/ai-rental-agent/rag-knowledge.md`, and emits the same structured events. It never creates appointments.
+
+`RentalChatServiceImpl` chooses model when available, catches provider/vector errors, emits `mode=FALLBACK`, and retries through fallback. Redis key format is `ai:chat:history:{userId}:{conversationId}`; client-supplied IDs are length/character validated.
+
+- [ ] **Step 5: Verify GREEN and existing model tests**
 
 ```powershell
-.\mvnw.cmd -pl web/web-app -Dtest=KnowledgeChunkerTest,HybridRentalKnowledgeServiceTest,PgVectorKnowledgeRepositoryIT test
+.\mvnw.cmd -pl web/web-app -Dtest=FallbackRentalChatEngineTest,RentalChatServiceImplTest test
+.\mvnw.cmd -pl web/web-app -am -DskipTests package
 ```
 
-Expected: first indexing inserts chunks, second indexing inserts zero new rows, and fallback test passes without PostgreSQL.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```powershell
-git add web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai web/web-app/src/main/java/com/atguigu/lease/web/app/config/PgVectorDataSourceConfiguration.java web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai docs/ai-rental-agent/rag-knowledge.md
-git commit -m "feat: add hybrid pgvector rental knowledge"
+git add common/src/main/java/com/atguigu/lease/config/ai/PgVectorDataSourceConfiguration.java web/web-app/src/main/java/com/atguigu/lease/web/app/config/ai web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai web/web-app/src/main/java/com/atguigu/lease/web/app/tools/RoomSearchTool.java web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai
+git commit -m "feat: add resilient rental chat fallback"
 ```
 
-### Task 6: 实现受控房源工具和 GLM/Fallback Agent
-
-**Files:**
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/agent/RentalAgent.java`
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/agent/AgentAnswer.java`
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/agent/AgentMode.java`
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/agent/AgentExecutionRegistry.java`
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/agent/ModelRentalAgent.java`
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/agent/FallbackRentalAgent.java`
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/tool/RentalReadTools.java`
-- Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/impl/RentalRoomToolServiceImpl.java`
-- Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai/AiRecommendedRoomVo.java`
-- Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/agent/AgentExecutionRegistryTest.java`
-- Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/agent/FallbackRentalAgentTest.java`
-- Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/agent/ModelRentalAgentTest.java`
-
-**Interfaces:**
-- Produces: `AgentAnswer answer(AgentRequest request)`; read-only tools `searchAvailableRooms(RoomToolRequest)` and `searchRentalKnowledge(KnowledgeToolRequest)`.
-
-- [ ] **Step 1: Write RED tests for tool safety and model fallback**
-
-```java
-@Test
-void modelFailureReturnsFallbackWithRealToolResults() {
-    when(chatClient.prompt()).thenThrow(new RuntimeException("provider timeout"));
-    AgentAnswer answer = agent.answer(new AgentRequest("预算2500并说明押金", preferences));
-    assertThat(answer.mode()).isEqualTo(AgentMode.FALLBACK);
-    assertThat(answer.rooms()).allMatch(room -> room.getRoomId() != null);
-    assertThat(answer.citations()).isNotEmpty();
-}
-```
-
-Add concurrency coverage proving `AgentExecutionRegistry` never mixes room IDs or citation IDs between simultaneous executions.
-
-- [ ] **Step 2: Run RED**
-
-```powershell
-.\mvnw.cmd -pl web/web-app -Dtest=AgentExecutionRegistryTest,FallbackRentalAgentTest,ModelRentalAgentTest test
-```
-
-- [ ] **Step 3: Implement Spring AI tool calling**
-
-Register only these model-visible tools:
-
-```java
-@Tool(description = "查询当前真实可租房源，只读")
-public List<AiRecommendedRoomVo> searchAvailableRooms(RoomToolRequest request) { ... }
-
-@Tool(description = "检索租房规则知识并返回来源，只读")
-public List<AiCitationVo> searchRentalKnowledge(KnowledgeToolRequest request) { ... }
-```
-
-The system prompt forbids appointment mutation and instructs the model to use tool results. `ModelRentalAgent` validates final structured IDs against the current execution registry; unknown IDs are discarded. A circuit-breaker-style timeout routes to `FallbackRentalAgent`.
-
-- [ ] **Step 4: Verify GREEN and existing parser regressions**
-
-```powershell
-.\mvnw.cmd -pl web/web-app -Dtest=AgentExecutionRegistryTest,FallbackRentalAgentTest,ModelRentalAgentTest,RentalIntentParserTest test
-```
-
-- [ ] **Step 5: Commit**
-
-```powershell
-git add web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai/AiRecommendedRoomVo.java web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai
-git commit -m "feat: add controlled GLM rental agent"
-```
-
-### Task 7: 持久化会话并收敛 AI API 合同
-
-**Files:**
-- Create: `model/src/main/java/com/atguigu/lease/model/entity/AiConversation.java`
-- Create: `model/src/main/java/com/atguigu/lease/model/entity/AiMessage.java`
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/mapper/AiConversationMapper.java`
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/mapper/AiMessageMapper.java`
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/AiConversationService.java`
-- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/impl/AiConversationServiceImpl.java`
-- Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/controller/ai/AiChatController.java`
-- Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai/AiChatRequestVo.java`
-- Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai/AiChatResponseVo.java`
-- Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/impl/AiConversationServiceImplTest.java`
-- Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/controller/ai/AiChatControllerIT.java`
-
-**Interfaces:**
-- Produces: `POST /app/ai/chat`; `GET /app/ai/sessions/{sessionId}`; response fields from the spec including `messageId` and `mode`.
-
-- [ ] **Step 1: Write RED ownership and history tests**
-
-```java
-@Test
-void rejectsReadingAnotherUsersConversation() {
-    UUID sessionId = repository.create(userOne);
-    assertThatThrownBy(() -> service.history(userTwo, sessionId))
-        .isInstanceOf(LeaseException.class)
-        .hasMessageContaining("无权访问会话");
-}
-```
-
-Controller integration coverage sends two messages under one session and expects ordered history containing both user and assistant messages.
-
-- [ ] **Step 2: Run RED**
-
-```powershell
-.\mvnw.cmd -pl web/web-app -Dtest=AiConversationServiceImplTest,AiChatControllerIT test
-```
-
-- [ ] **Step 3: Implement conversation ownership and message persistence**
-
-Use UUID session IDs, MySQL ownership as source of truth, Redis as a bounded history cache, and a maximum of 10 prior turns in model context. Persist fallback responses exactly like model responses.
-
-- [ ] **Step 4: Verify GREEN**
-
-```powershell
-.\mvnw.cmd -pl web/web-app -Dtest=AiChatRequestValidatorTest,AiConversationServiceImplTest,AiChatControllerIT test
-```
-
-- [ ] **Step 5: Commit**
-
-```powershell
-git add model/src/main/java/com/atguigu/lease/model/entity/AiConversation.java model/src/main/java/com/atguigu/lease/model/entity/AiMessage.java web/web-app/src/main/java/com/atguigu/lease/web/app/mapper web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai web/web-app/src/main/java/com/atguigu/lease/web/app/controller/ai web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai web/web-app/src/test/java/com/atguigu/lease/web/app
-git commit -m "feat: persist rental agent conversations"
-```
-
-### Task 8: 实现预约草稿、一次性确认和并发幂等
+### Task 6: 实现预约草稿、二次确认、幂等写入和 Outbox
 
 **Files:**
 - Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/controller/ai/AiAppointmentController.java`
@@ -521,29 +375,32 @@ git commit -m "feat: persist rental agent conversations"
 - Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai/appointment/AppointmentConfirmRequest.java`
 - Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai/appointment/AppointmentConfirmResponse.java`
 - Create: `model/src/main/java/com/atguigu/lease/model/entity/AiAppointmentIdempotency.java`
+- Create: `model/src/main/java/com/atguigu/lease/model/entity/AppointmentEventOutbox.java`
+- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/mapper/AiAppointmentIdempotencyMapper.java`
+- Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/mapper/AppointmentEventOutboxMapper.java`
 - Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ViewAppointmentService.java`
 - Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/impl/ViewAppointmentServiceImpl.java`
 - Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/appointment/AppointmentDraftServiceTest.java`
 - Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/appointment/AppointmentConfirmationServiceIT.java`
 
 **Interfaces:**
-- Produces: `POST /app/ai/appointments/draft`; `POST /app/ai/appointments/confirm`; `createConfirmedAppointment(long userId, AppointmentDraft draft, String tokenHash)`.
+- Produces: `POST /app/ai/appointments/draft`; `POST /app/ai/appointments/confirm`; Outbox row in same transaction as appointment.
 
-- [ ] **Step 1: Write RED validation and idempotency tests**
+- [ ] **Step 1: Write RED validation and concurrency tests**
 
 ```java
 @Test
-void concurrentConfirmationCreatesExactlyOneAppointment() throws Exception {
+void concurrentConfirmationCreatesOneAppointmentAndOneOutboxEvent() {
     String token = drafts.create(userId, validDraft).confirmationToken();
-    List<AppointmentConfirmResponse> results = runConcurrently(2,
-        () -> confirmations.confirm(userId, token));
+    List<AppointmentConfirmResponse> results = runConcurrently(2, () -> confirmations.confirm(userId, token));
     assertThat(appointmentCount(userId, validDraft.roomId())).isEqualTo(1);
-    assertThat(results).extracting(AppointmentConfirmResponse::appointmentId).containsOnly(results.getFirst().appointmentId());
-    assertThat(results).extracting(AppointmentConfirmResponse::idempotentReplay).containsExactlyInAnyOrder(false, true);
+    assertThat(outboxCount(results.getFirst().appointmentId())).isEqualTo(1);
+    assertThat(results).extracting(AppointmentConfirmResponse::appointmentId)
+        .containsOnly(results.getFirst().appointmentId());
 }
 ```
 
-Add tests for expired token, wrong user, past time, unavailable room, malformed phone and duplicate active appointment.
+Add tests for expired token, wrong user, past time, unavailable room, invalid phone and duplicate active appointment.
 
 - [ ] **Step 2: Run RED**
 
@@ -551,11 +408,11 @@ Add tests for expired token, wrong user, past time, unavailable room, malformed 
 .\mvnw.cmd -pl web/web-app -Dtest=AppointmentDraftServiceTest,AppointmentConfirmationServiceIT test
 ```
 
-- [ ] **Step 3: Implement two-phase confirmation**
+- [ ] **Step 3: Implement two-phase mutation boundary**
 
-Store only a SHA-256 token hash in durable idempotency rows. Redis value includes user ID and normalized immutable draft. Use Redis Lua or `SET NX` lock for atomic transition `PENDING -> PROCESSING`; transaction inserts appointment, idempotency row and Outbox row. On duplicate-key race, load and return the existing appointment with `idempotentReplay=true`.
+Drafts are immutable Redis JSON under a random 256-bit token, TTL 10 minutes, namespaced by user. The durable table stores only SHA-256 token hash. Confirmation uses Redis atomic `PENDING -> PROCESSING`, revalidates room/time, and in one `@Transactional` method inserts `view_appointment`, idempotency and `appointment_event_outbox`. Duplicate-key races load the existing appointment and set `idempotentReplay=true`.
 
-- [ ] **Step 4: Verify GREEN and API behavior**
+- [ ] **Step 4: Verify GREEN**
 
 ```powershell
 .\mvnw.cmd -pl web/web-app -Dtest=AppointmentDraftServiceTest,AppointmentConfirmationServiceIT test
@@ -564,14 +421,13 @@ Store only a SHA-256 token hash in durable idempotency rows. Redis value include
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add model/src/main/java/com/atguigu/lease/model/entity/AiAppointmentIdempotency.java web/web-app/src/main/java/com/atguigu/lease/web/app/controller/ai web/web-app/src/main/java/com/atguigu/lease/web/app/service web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai/appointment web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/appointment
-git commit -m "feat: add confirmed idempotent AI appointments"
+git add model/src/main/java/com/atguigu/lease/model/entity/AiAppointmentIdempotency.java model/src/main/java/com/atguigu/lease/model/entity/AppointmentEventOutbox.java web/web-app/src/main/java/com/atguigu/lease/web/app/controller/ai web/web-app/src/main/java/com/atguigu/lease/web/app/mapper web/web-app/src/main/java/com/atguigu/lease/web/app/service web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai/appointment web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/appointment
+git commit -m "feat: add confirmed AI appointment workflow"
 ```
 
-### Task 9: 用 Transactional Outbox 完成 RabbitMQ 最终投递
+### Task 7: 可靠投递预约事件并验证 RabbitMQ 恢复
 
 **Files:**
-- Create: `model/src/main/java/com/atguigu/lease/model/entity/AppointmentEventOutbox.java`
 - Create: `common/src/main/java/com/atguigu/lease/outbox/AppointmentOutboxPublisher.java`
 - Create: `common/src/main/java/com/atguigu/lease/outbox/AppointmentOutboxRepository.java`
 - Create: `common/src/main/java/com/atguigu/lease/outbox/OutboxPublishScheduler.java`
@@ -580,15 +436,15 @@ git commit -m "feat: add confirmed idempotent AI appointments"
 - Test: `web/web-app/src/test/java/com/atguigu/lease/outbox/AppointmentOutboxPublisherIT.java`
 
 **Interfaces:**
-- Consumes: `appointment_event_outbox` rows created in Task 8.
-- Produces: publisher confirms; states `PENDING`, `PUBLISHED`, `DEAD`; exponential retry with maximum 5 attempts.
+- Consumes: pending `appointment_event_outbox` rows.
+- Produces: publisher-confirmed states `PENDING`, `PUBLISHED`, `DEAD`; at most five attempts.
 
-- [ ] **Step 1: Write RED recovery test**
+- [ ] **Step 1: Write and run RED recovery test**
 
 ```java
 @Test
-void pendingEventPublishesAfterRabbitRecovers() {
-    long eventId = insertPendingOutbox();
+void pendingEventPublishesAfterBrokerRecovery() {
+    long eventId = insertPendingEvent();
     rabbit.stop();
     publisher.publishBatch();
     assertThat(status(eventId)).isEqualTo("PENDING");
@@ -600,75 +456,88 @@ void pendingEventPublishesAfterRabbitRecovers() {
 }
 ```
 
-- [ ] **Step 2: Run RED**
+```powershell
+.\mvnw.cmd -pl web/web-app -Dtest=AppointmentOutboxPublisherIT test
+```
+
+- [ ] **Step 2: Implement claim, confirms and backoff**
+
+Claim with `FOR UPDATE SKIP LOCKED`, publish event ID as correlation ID, mark `PUBLISHED` only after confirm, and persist `next_attempt_at` with exponential backoff. Consumer deduplicates by event ID. Existing direct appointment publisher is removed from `ViewAppointmentServiceImpl` only after this test is GREEN.
+
+- [ ] **Step 3: Verify GREEN**
 
 ```powershell
 .\mvnw.cmd -pl web/web-app -Dtest=AppointmentOutboxPublisherIT test
 ```
 
-- [ ] **Step 3: Implement publisher confirms and retry state**
-
-Claim rows with `SELECT ... FOR UPDATE SKIP LOCKED`, publish with event ID as correlation ID, mark published only after broker confirm, persist a truncated error and next attempt time on failure, and mark `DEAD` after five failures. Consumer logs and deduplicates by event ID.
-
-- [ ] **Step 4: Verify GREEN**
+- [ ] **Step 4: Commit**
 
 ```powershell
-.\mvnw.cmd -pl web/web-app -Dtest=AppointmentOutboxPublisherIT test
+git add common/src/main/java/com/atguigu/lease/outbox common/src/main/java/com/atguigu/lease/config/RabbitMQConfig.java common/src/main/java/com/atguigu/lease/consumer/appointment/AppointmentMessageConsumer.java web/web-app/src/test/java/com/atguigu/lease/outbox web/web-app/src/main/java/com/atguigu/lease/web/app/service/impl/ViewAppointmentServiceImpl.java
+git commit -m "feat: publish appointments through outbox"
 ```
 
-- [ ] **Step 5: Commit**
-
-```powershell
-git add model/src/main/java/com/atguigu/lease/model/entity/AppointmentEventOutbox.java common/src/main/java/com/atguigu/lease/outbox common/src/main/java/com/atguigu/lease/config/RabbitMQConfig.java common/src/main/java/com/atguigu/lease/consumer/appointment/AppointmentMessageConsumer.java web/web-app/src/test/java/com/atguigu/lease/outbox
-git commit -m "feat: reliably publish appointment events"
-```
-
-### Task 10: 将 H5 纳入仓库并建立前端测试基线
+### Task 8: 纳入 H5 并实现 SSE 对话与预约确认 UI
 
 **Files:**
-- Create: `frontend/rent-house-h5/**` copied from `E:\frontend\rentHouseH5\rentHouseH5` excluding `node_modules`, `dist`, `.env.*` secrets and generated caches
-- Modify: `frontend/rent-house-h5/package.json`
+- Create: `frontend/rent-house-h5/**` copied from `E:\frontend\rentHouseH5\rentHouseH5` excluding `node_modules`, build output and local env files
+- Create: `frontend/rent-house-h5/src/api/ai/index.ts`
+- Create: `frontend/rent-house-h5/src/api/ai/types.ts`
+- Create: `frontend/rent-house-h5/src/views/aiAssistant/aiAssistant.vue`
+- Create: `frontend/rent-house-h5/src/components/AiRoomCard/AiRoomCard.vue`
+- Create: `frontend/rent-house-h5/src/components/AiCitationList/AiCitationList.vue`
+- Create: `frontend/rent-house-h5/src/components/AppointmentDraftSheet/AppointmentDraftSheet.vue`
 - Create: `frontend/rent-house-h5/vitest.config.ts`
 - Create: `frontend/rent-house-h5/playwright.config.ts`
 - Create: `frontend/rent-house-h5/Dockerfile`
 - Create: `frontend/rent-house-h5/nginx.conf`
+- Modify: `frontend/rent-house-h5/package.json`
+- Modify: `frontend/rent-house-h5/src/router/otherRoutes.ts`
+- Modify: `frontend/rent-house-h5/src/views/message/message.vue`
 - Modify: `compose.yaml`
-- Test: `frontend/rent-house-h5/src/App.spec.ts`
+- Test: `frontend/rent-house-h5/src/views/aiAssistant/aiAssistant.spec.ts`
+- Test: `frontend/rent-house-h5/src/components/AppointmentDraftSheet/AppointmentDraftSheet.spec.ts`
 
 **Interfaces:**
-- Produces: `npm run type-check`, `npm run test:unit`, `npm run build`, H5 service at `http://localhost:5173`.
+- Consumes: SSE event contract from Task 5 and appointment APIs from Task 6.
+- Produces: `/ai-assistant`; room-detail navigation; explicit confirm; `/myAppointment` result navigation.
 
-- [ ] **Step 1: Copy the clean source tree**
+- [ ] **Step 1: Copy clean source and add test baseline**
 
-Use a file manifest from `rg --files` and copy source/config/assets only. Do not copy the original `node_modules`, `dist`, local `.env.development`, local `.env.production`, or Git metadata. Preserve the original MIT license.
+Use the source manifest from `rg --files`; do not copy `node_modules`, `dist`, `.env.development`, `.env.production` or Git metadata. Preserve `LICENSE`.
 
-- [ ] **Step 2: Write and run a RED frontend test**
+- [ ] **Step 2: Write RED tests**
 
 ```ts
-import { mount } from '@vue/test-utils'
-import App from './App.vue'
+it('renders streaming recommendations and citations', async () => {
+  const wrapper = mount(AiAssistant, { global: testPlugins })
+  fakeSse.emit({ type: 'meta', payload: { mode: 'FALLBACK' } })
+  fakeSse.emit({ type: 'recommendations', payload: [room] })
+  fakeSse.emit({ type: 'citations', payload: [citation] })
+  expect(wrapper.text()).toContain('降级模式')
+  expect(wrapper.text()).toContain(room.apartmentName)
+  expect(wrapper.text()).toContain(citation.source)
+})
 
-it('mounts the H5 application shell', () => {
-  expect(mount(App, { global: { stubs: ['router-view'] } }).exists()).toBe(true)
+it('does not confirm before explicit click', async () => {
+  const wrapper = mount(AppointmentDraftSheet, { props: { room, open: true } })
+  await wrapper.find('[data-test="create-draft"]').trigger('click')
+  expect(confirmAppointment).not.toHaveBeenCalled()
+  await wrapper.find('[data-test="confirm-appointment"]').trigger('click')
+  expect(confirmAppointment).toHaveBeenCalledTimes(1)
 })
 ```
 
-Run:
+Run `npm run test:unit`; expected RED because components and test config do not exist.
 
-```powershell
-Set-Location frontend/rent-house-h5
-npm run test:unit
-```
+- [ ] **Step 3: Implement UI and SSE parser**
 
-Expected: FAIL because Vitest scripts and dependencies are absent.
-
-- [ ] **Step 3: Add Vitest, Playwright and production container**
-
-Add scripts `test:unit`, `test:e2e`, and `type-check`; pin a Node 20 build image. Nginx serves the built SPA and proxies `/app` to `web-app:8081`.
+Use `fetch` stream parsing for POST SSE because native `EventSource` cannot send the authenticated POST body. Reuse the existing Axios token source and send `access-token`. Preserve partial answer on reconnect errors, disable duplicate submits, use Vant action sheet for draft and explicit confirmation, and keep stable mobile dimensions.
 
 - [ ] **Step 4: Verify GREEN**
 
 ```powershell
+Set-Location frontend/rent-house-h5
 npm ci
 npm run type-check
 npm run test:unit
@@ -681,95 +550,33 @@ docker compose config
 
 ```powershell
 git add frontend/rent-house-h5 compose.yaml
-git commit -m "build: integrate tenant H5 application"
+git commit -m "feat: integrate H5 AI rental assistant"
 ```
 
-### Task 11: 实现 H5 AI 对话、房源卡片和预约确认体验
-
-**Files:**
-- Create: `frontend/rent-house-h5/src/api/ai/index.ts`
-- Create: `frontend/rent-house-h5/src/api/ai/types.ts`
-- Create: `frontend/rent-house-h5/src/views/aiAssistant/aiAssistant.vue`
-- Create: `frontend/rent-house-h5/src/components/AiRoomCard/AiRoomCard.vue`
-- Create: `frontend/rent-house-h5/src/components/AiCitationList/AiCitationList.vue`
-- Create: `frontend/rent-house-h5/src/components/AppointmentDraftSheet/AppointmentDraftSheet.vue`
-- Modify: `frontend/rent-house-h5/src/router/otherRoutes.ts`
-- Modify: `frontend/rent-house-h5/src/views/message/message.vue`
-- Test: `frontend/rent-house-h5/src/views/aiAssistant/aiAssistant.spec.ts`
-- Test: `frontend/rent-house-h5/src/components/AppointmentDraftSheet/AppointmentDraftSheet.spec.ts`
-
-**Interfaces:**
-- Consumes: Task 7 and Task 8 API contracts.
-- Produces: `/ai-assistant` route; persistent session ID; navigation to `/roomDetail?id=...` and `/myAppointment`.
-
-- [ ] **Step 1: Write RED component tests**
-
-```ts
-it('requires explicit confirmation before calling confirm API', async () => {
-  const wrapper = mount(AppointmentDraftSheet, { props: { room, open: true } })
-  await wrapper.find('[data-test="create-draft"]').trigger('click')
-  expect(createDraft).toHaveBeenCalledTimes(1)
-  expect(confirmAppointment).not.toHaveBeenCalled()
-  await wrapper.find('[data-test="confirm-appointment"]').trigger('click')
-  expect(confirmAppointment).toHaveBeenCalledTimes(1)
-})
-```
-
-Add assertions that MODEL/FALLBACK labels render, citations display source names, and recommended room cards use stable dimensions.
-
-- [ ] **Step 2: Run RED**
-
-```powershell
-Set-Location frontend/rent-house-h5
-npm run test:unit -- aiAssistant AppointmentDraftSheet
-```
-
-- [ ] **Step 3: Implement the H5 flow**
-
-Use Vant icons, list/card primitives and an action sheet. Keep the message composer above the safe-area inset, disable submit while pending, preserve unsent text after network failure, and never call confirmation before the explicit button event. Use existing auth interceptor and room/appointment routes.
-
-- [ ] **Step 4: Verify GREEN, types and build**
-
-```powershell
-npm run test:unit
-npm run type-check
-npm run build
-```
-
-- [ ] **Step 5: Commit**
-
-```powershell
-Set-Location ..\..
-git add frontend/rent-house-h5/src
-git commit -m "feat: add tenant AI rental assistant UI"
-```
-
-### Task 12: 完成 API、Compose 和 Playwright 端到端验收
+### Task 9: 完成 fallback/model、预约和浏览器端到端验收
 
 **Files:**
 - Create: `web/web-app/src/test/java/com/atguigu/lease/e2e/RentalAgentClosedLoopIT.java`
 - Create: `frontend/rent-house-h5/e2e/rental-agent-closed-loop.spec.ts`
 - Create: `scripts/smoke-ai-agent.ps1`
-- Modify: `compose.yaml`
 - Modify: `readme.md`
 - Modify: `docs/ai-rental-agent/api.md`
 - Modify: `docs/ai-rental-agent/test-report.md`
+- Modify: `.superpowers/sdd/progress.md`
 
 **Interfaces:**
-- Produces: one-command stack; API smoke script; browser flow proving the spec acceptance criteria.
+- Produces: one-command demo and fresh verification evidence for every spec acceptance criterion.
 
-- [ ] **Step 1: Write RED API and browser journeys**
-
-API integration journey:
+- [ ] **Step 1: Write RED API journey**
 
 ```java
 @Test
 void fallbackChatToConfirmedAppointmentIsClosedLoop() {
     String token = login("13800000000", "888888");
-    AiChatResponse chat = chat(token, "预算2500并说明押金怎么退");
-    assertThat(chat.mode()).isEqualTo(FALLBACK);
-    assertThat(chat.recommendedRooms()).isNotEmpty();
-    DraftResponse draft = draft(token, chat.recommendedRooms().getFirst().roomId(), tomorrowAt(14, 0));
+    SseCapture chat = chat(token, "预算2500并说明押金怎么退");
+    assertThat(chat.meta().mode()).isEqualTo("FALLBACK");
+    assertThat(chat.recommendations()).isNotEmpty();
+    DraftResponse draft = draft(token, chat.recommendations().getFirst().roomId(), tomorrowAt(14, 0));
     ConfirmResponse first = confirm(token, draft.confirmationToken());
     ConfirmResponse replay = confirm(token, draft.confirmationToken());
     assertThat(replay.appointmentId()).isEqualTo(first.appointmentId());
@@ -777,33 +584,25 @@ void fallbackChatToConfirmedAppointmentIsClosedLoop() {
 }
 ```
 
-Playwright journey uses mobile viewport `390x844`, completes the same flow in H5 and captures the assistant page and final appointment page.
+- [ ] **Step 2: Write RED Playwright journey**
 
-- [ ] **Step 2: Run RED**
+Use `390x844` and desktop `1440x900`: demo login, send mixed question, wait for room/citation, create draft, confirm, open “我的预约”, assert the new appointment ID, and capture both pages.
 
-```powershell
-.\mvnw.cmd -pl web/web-app -Dtest=RentalAgentClosedLoopIT test
-Set-Location frontend/rent-house-h5
-npx playwright test e2e/rental-agent-closed-loop.spec.ts
-```
-
-- [ ] **Step 3: Close integration gaps and document exact operations**
-
-`scripts/smoke-ai-agent.ps1` obtains a demo token, posts a mixed query, drafts and confirms an appointment twice, and asserts one appointment ID. README documents:
+- [ ] **Step 3: Add API smoke script and exact README commands**
 
 ```powershell
 Copy-Item .env.example .env
 docker compose up --build
+.\scripts\verify-compose.ps1
 .\scripts\smoke-ai-agent.ps1
-docker compose down
-docker compose down --volumes  # documented destructive demo reset only
 ```
 
-The destructive reset command must remain documentation-only unless the user explicitly requests a reset.
+Document `docker compose down --volumes` as a destructive demo reset command, but do not execute it without a new explicit user request.
 
-- [ ] **Step 4: Run complete verification from a clean demo stack**
+- [ ] **Step 4: Run full fresh verification**
 
 ```powershell
+git branch --show-current
 .\mvnw.cmd clean verify
 Set-Location frontend/rent-house-h5
 npm ci
@@ -818,32 +617,31 @@ Set-Location frontend/rent-house-h5
 npx playwright test
 ```
 
-Expected: Maven reports zero failures; H5 type/build/unit suites exit 0; every Compose service is healthy; API smoke passes; Playwright passes on mobile and desktop; screenshots show no overlap.
+Then run optional model smoke with valid keys and assert SSE `meta.mode=MODEL`, `RoomSearchTool` output and citations.
 
-- [ ] **Step 5: Run secret and worktree audit**
+- [ ] **Step 5: Audit secrets and unrelated changes**
 
 ```powershell
 Set-Location ..\..
-rg -n "api-key:\s*[^$]|GLM_API_KEY=.+|access-key-secret:\s*[^$]" . -g '!target/**' -g '!node_modules/**' -g '!.env'
-git status --short
+rg -n "api-key:\s*[^$<]|AI_(CHAT|EMBED)_API_KEY=.+|access-key-secret:\s*[^$<]" . -g '!target/**' -g '!node_modules/**' -g '!.env'
 git diff --check
+git status --short
 ```
 
-Expected: no committed secret match; `.idea/misc.xml` remains the only pre-existing unrelated modification.
+Expected: no tracked secret; branch is `agentRag`; `.idea/misc.xml` remains unstaged.
 
-- [ ] **Step 6: Commit documentation and final tests**
+- [ ] **Step 6: Commit final verification artifacts**
 
 ```powershell
-git add web/web-app/src/test/java/com/atguigu/lease/e2e frontend/rent-house-h5/e2e scripts/smoke-ai-agent.ps1 compose.yaml readme.md docs/ai-rental-agent
-git commit -m "test: verify AI rental appointment closed loop"
+git add web/web-app/src/test/java/com/atguigu/lease/e2e frontend/rent-house-h5/e2e scripts/smoke-ai-agent.ps1 readme.md docs/ai-rental-agent .superpowers/sdd/progress.md
+git commit -m "test: verify agentRag rental closed loop"
 ```
 
 ## Plan Completion Gate
 
-Before declaring implementation complete:
-
-- Re-read `docs/superpowers/specs/2026-08-03-ai-rental-agent-closed-loop-design.md` and map every acceptance criterion to fresh command output.
-- Confirm every task checkbox is complete and every task has its own commit.
-- Confirm no test was added only after its production behavior.
-- Confirm `.idea/misc.xml` is neither staged nor committed.
-- Confirm no command required to prove completion is still running.
+- Re-read `docs/superpowers/specs/2026-08-03-ai-rental-agent-closed-loop-design.md` and map all nine acceptance criteria to fresh output.
+- Confirm the 2026-06-30 RAG tests remain GREEN and no duplicate AI implementation was introduced.
+- Confirm all nine tasks have RED evidence, GREEN evidence and their own commit.
+- Confirm every commit belongs to `agentRag`; `master` remains at `origin/master`.
+- Confirm `.idea/misc.xml` is not staged or committed.
+- Confirm no required verification process is still running.

@@ -1,5 +1,9 @@
 # 27公寓 AI 租房顾问闭环设计
 
+> 实施分支：`agentRag`
+>
+> 现有基线：该分支已经完成 Java 21、Spring Boot 3.4.1、Spring AI 1.0.0、GLM 双 Key、PGvector 第二数据源、房源/文档知识入库、Admin 知识管理、`RoomSearchTool`、Redis 多轮历史和 SSE 对话。本文档在此基线上补齐可复现运行与预约业务闭环，不重新实现或替换已经验证的 RAG 管线。
+
 ## 1. 目标
 
 在现有 27 公寓找房系统中交付一个可复现、可降级、可自动测试的 AI 租房顾问闭环：租客登录 H5 后，通过自然语言描述租房需求，Agent 查询真实可租房源并检索租房知识；租客选择房源和预约时间，系统生成预约草稿；只有在租客明确确认后才创建预约；创建结果能够在“我的预约”中查询。
@@ -10,7 +14,7 @@
 
 ### 2.1 本期包含
 
-- Java 21、Spring Boot 3.4.x、Spring AI 1.0.x 和 Maven Wrapper 的工程基线。
+- 验证并保留现有 Java 21、Spring Boot 3.4.1、Spring AI 1.0.0 工程基线，补充 Maven Wrapper。
 - MySQL、Redis、RabbitMQ、MinIO、PGvector、后端服务和 H5 的 Docker Compose 编排。
 - 可重复执行的数据库结构与脱敏演示数据初始化。
 - GLM OpenAI 兼容接口接入，API Key 仅从本地 `.env` 或环境变量读取。
@@ -23,7 +27,7 @@
 ### 2.2 本期不包含
 
 - AI 自动签约、自动支付或自动取消合同。
-- Admin 端知识库上传、切片和运营管理页面。
+- 新增或重构 Admin 端知识库能力；`agentRag` 已有的知识上传、切片、重建索引和房源同步接口继续保留。
 - 多租户、计费、模型评测平台和独立微服务拆分。
 - 将真实 API Key、手机号或生产数据提交到 Git。
 
@@ -47,12 +51,13 @@ H5 不解析模型工具调用，只消费后端返回的稳定 DTO：会话消�
 
 ### 4.2 后端
 
-`web-app` 中新增或调整以下职责边界：
+`web-app` 以现有 `RentalChatServiceImpl`、`ChatClientConfiguration`、`RoomSearchTool`、`VectorStore` 和 SSE 协议为基线，新增或调整以下职责边界：
 
-- `AiConversationService`：校验请求、加载会话、执行 Agent、保存消息并组装响应。
-- `RentalAgent`：通过 Spring AI `ChatClient` 调用 GLM，并暴露只读房源和知识工具。
-- `RentalRoomTool`：复用现有 `RoomInfoService`，只返回已上架且没有有效租约的房源。
-- `RentalKnowledgeService`：负责文档切片、入库、向量检索、关键词降级和引用映射。
+- `RentalChatService`：保留 SSE 流式协议，校验请求、绑定登录用户会话、执行模型或 fallback 引擎并发送结构化事件。
+- `ModelRentalChatEngine`：复用现有 Spring AI `ChatClient`、`RoomSearchTool` 和 PGvector 检索，调用 GLM 并流式生成回答。
+- `FallbackRentalChatEngine`：在 GLM 或 PGvector 不可用时，复用现有 MySQL 房源查询并对版本化 Markdown 执行关键词检索。
+- `RoomSearchTool`：保留现有 `@Tool`，继续只返回 MySQL 中真实可租房源，并补足结构化推荐 DTO。
+- `RentalKnowledgeService`：复用现有房源/文档向量管线，在 fallback 下提供同引用 DTO 的关键词检索。
 - `AppointmentDraftService`：校验房源、时间和联系人，创建 Redis 草稿及确认令牌。
 - `AppointmentConfirmationService`：原子消费令牌，幂等创建预约并返回结果。
 - `AppointmentEventPublisher`：通过 Transactional Outbox 发布预约事件；预约与 Outbox 在同一 MySQL 事务写入，后台任务投递成功后更新事件状态。
@@ -74,7 +79,7 @@ H5 不解析模型工具调用，只消费后端返回的稳定 DTO：会话消�
 
 ### 5.2 找房与知识问答
 
-1. H5 调用 `POST /app/ai/chat`，提交 `sessionId`、`message` 和可选结构化偏好。
+1. H5 调用现有 `POST /app/ai/chat` SSE 接口，提交 `conversationId`、`message` 和可选结构化偏好。
 2. 后端验证登录用户和消息长度，加载该用户有权访问的会话历史。
 3. GLM 决定是否调用 `search_available_rooms` 和 `search_rental_knowledge`。
 4. 房源工具查询 MySQL；知识工具查询 PGvector。两者均限制返回数量并设置超时。
@@ -84,9 +89,9 @@ H5 不解析模型工具调用，只消费后端返回的稳定 DTO：会话消�
 
 ### 5.3 RAG 入库与检索
 
-租房知识以版本化 Markdown 文件纳入 Git。应用启动后，初始化任务按标题切分文档，生成内容校验和；只有新版本或内容变化时才重新生成向量并 upsert，重复启动不得产生重复切片。
+租房知识以版本化 Markdown 文件纳入 Git。正常模型模式沿用 `agentRag` 已实现的文档上传、Tika 解析、切片、embedding、PGvector 入库和重建索引；Docker 演示环境在首次启动时幂等导入一份固定知识文档，重复启动不得产生重复向量。
 
-正常模式使用 GLM embedding 和 PGvector 余弦相似度检索，返回 `title`、`category`、`source`、`snippet` 和 `score`。没有 embedding 能力时，使用数据库全文/关键词评分或本地文档关键词评分，仍返回相同引用 DTO。
+正常模式使用现有 GLM embedding 和 PGvector 余弦相似度检索，返回 `title`、`category`、`source`、`snippet` 和 `score`。没有 embedding 能力时，使用本地版本化文档关键词评分，仍返回相同引用 DTO。
 
 ### 5.4 预约草稿与确认
 
@@ -103,19 +108,18 @@ H5 不解析模型工具调用，只消费后端返回的稳定 DTO：会话消�
 
 ### 6.1 AI 对话
 
-`POST /app/ai/chat`
+`POST /app/ai/chat` 保持现有 `text/event-stream` SSE 返回方式，避免破坏已经实现的接口合同。
 
-请求包含 `sessionId`、`message` 和 `preferences`。响应包含：
+请求包含 `conversationId`、`message` 和可选结构化偏好。SSE `chat` 事件中的 `ChatSseEvent` 包含：
 
-- `sessionId`
-- `messageId`
-- `answer`
-- `mode`：`MODEL` 或 `FALLBACK`
-- `recommendedRooms`
-- `citations`
-- `suggestedActions`
+- `type=meta`：`conversationId` 和 `mode`（`MODEL` 或 `FALLBACK`）。
+- `type=message`：流式文本片段。
+- `type=recommendations`：真实房源结构化列表。
+- `type=citations`：知识和房源引用。
+- `type=done`：完整回答和建议动作。
+- `type=error`：可向用户展示的错误，不包含密钥或供应商响应体。
 
-`GET /app/ai/sessions/{sessionId}` 只允许会话所属用户访问，返回按时间排序的用户消息和助手消息。
+Redis 历史 key 必须同时包含登录用户 ID 和 `conversationId`，防止用户通过猜测 ID 读取或污染他人上下文。本期不新增 MySQL 长期会话表。
 
 ### 6.2 预约草稿
 
@@ -205,7 +209,7 @@ H5 不解析模型工具调用，只消费后端返回的稳定 DTO：会话消�
 
 1. 全新 Docker 数据卷执行 `docker compose up --build` 后，所有必需服务健康。
 2. 未设置 GLM Key 时能够完成登录、找房、知识问答、预约草稿、确认和预约查询。
-3. 设置有效 GLM Key 时响应为 `mode=MODEL`，并实际发生受控只读工具调用。
+3. 设置有效 GLM Key 时 SSE `meta` 事件为 `mode=MODEL`，并实际发生现有 `RoomSearchTool` 受控只读工具调用。
 4. 推荐房源全部来自初始化 MySQL 数据，知识回答包含可定位的真实引用。
 5. 未经确认不能创建预约；重复确认只产生一条预约；越权确认失败。
 6. RabbitMQ 暂时不可用时预约不丢失，服务恢复后事件最终被处理。
