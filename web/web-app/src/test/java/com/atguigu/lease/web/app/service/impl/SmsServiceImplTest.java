@@ -1,25 +1,26 @@
 package com.atguigu.lease.web.app.service.impl;
 
+import com.aliyun.dysmsapi20170525.Client;
+import com.aliyun.dysmsapi20170525.models.SendSmsRequest;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.mockito.ArgumentCaptor;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
-@SpringBootTest
 class SmsServiceImplTest {
 
-
-    @Autowired
-    private SmsServiceImpl smsService;
-
-
-    /**
-     * 测试验证码发送功能是否正常。
-     * 运行，查看手机是否收到验证码。
-     */
     @Test
-    void sendCode() {
-        smsService.sendCode("15722922862", "4567");
+    void sendsGeneratedCodeThroughAliyunClient() throws Exception {
+        Client client = mock(Client.class);
+        SmsServiceImpl service = new SmsServiceImpl(client);
+
+        service.sendCode("13800000000", "456789");
+
+        ArgumentCaptor<SendSmsRequest> request = ArgumentCaptor.forClass(SendSmsRequest.class);
+        verify(client).sendSms(request.capture());
+        assertThat(request.getValue().getPhoneNumbers()).isEqualTo("13800000000");
+        assertThat(request.getValue().getTemplateParam()).isEqualTo("{\"code\":\"456789\"}");
     }
 }

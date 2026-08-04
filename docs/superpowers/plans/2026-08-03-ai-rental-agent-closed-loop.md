@@ -264,7 +264,7 @@ git commit -m "build: containerize agentRag services"
 **Interfaces:**
 - Produces: `VerificationCodeService.issue(phone)` and `verify(phone, code)`; demo phone `13800000000`, code `888888` only when `app.demo-login.enabled=true`.
 
-- [ ] **Step 1: Write RED tests**
+- [x] **Step 1: Write RED tests**
 
 ```java
 @Test
@@ -277,23 +277,23 @@ void fixedCodeIsLimitedToConfiguredDemoPhone() {
 
 Also load Spring context twice and assert demo bean is selected only when the property is true.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```powershell
 .\mvnw.cmd -pl web/web-app -Dtest=DemoVerificationCodeServiceTest,LoginServiceImplTest test
 ```
 
-- [ ] **Step 3: Implement strategy injection**
+- [x] **Step 3: Implement strategy injection**
 
 Move Redis/SMS issue and verify behavior out of `LoginServiceImpl`. Use conditional beans; non-demo behavior remains unchanged.
 
-- [ ] **Step 4: Verify GREEN and SMS regression**
+- [x] **Step 4: Verify GREEN and SMS regression**
 
 ```powershell
 .\mvnw.cmd -pl web/web-app -Dtest=DemoVerificationCodeServiceTest,LoginServiceImplTest,SmsServiceImplTest test
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add web/web-app/src/main/java/com/atguigu/lease/web/app/config/DemoLoginProperties.java web/web-app/src/main/java/com/atguigu/lease/web/app/service/VerificationCodeService.java web/web-app/src/main/java/com/atguigu/lease/web/app/service/impl web/web-app/src/main/resources/application-docker.yml web/web-app/src/test/java/com/atguigu/lease/web/app/service/impl
