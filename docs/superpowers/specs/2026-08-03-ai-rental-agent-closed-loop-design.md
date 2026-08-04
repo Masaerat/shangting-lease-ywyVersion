@@ -189,6 +189,7 @@ Redis 历史 key 必须同时包含登录用户 ID 和 `conversationId`，防止
 使用 Testcontainers 启动 MySQL、Redis、RabbitMQ 和 PGvector，验证：
 
 - Flyway/初始化迁移可从空库执行。
+- 默认本地 profile 将现有 `lease` 结构登记为 V1 基线并仅执行 V2+ 增量迁移；隔离的 Docker profile 对空库执行 V1+，两套环境保持相同最终结构。
 - 登录、对话、房源查询、草稿、确认和预约查询完整链路。
 - 事务提交后事件发布，失败事件能够重试或进入死信处理。
 - 同一确认令牌并发提交只创建一条预约。

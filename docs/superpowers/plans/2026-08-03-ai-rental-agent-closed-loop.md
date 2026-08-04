@@ -6,7 +6,7 @@
 
 **Architecture:** 保留现有 Java 21 / Spring Boot 3.4.1 / Spring AI 1.0.0、`AiModelConfiguration`、PGvector 第二数据源、Admin 文档/房源入库、`RoomSearchTool`、`RentalChatServiceImpl` 和 SSE 协议。新增模型与 fallback 两个聊天引擎；模型模式继续使用现有 ChatClient + VectorStore + Tool，fallback 模式使用 MySQL + 本地知识。预约写入通过 Redis 草稿令牌、MySQL 幂等记录和 Outbox 完成。
 
-**Tech Stack:** Java 21, Spring Boot 3.4.1, Spring AI 1.0.0, MyBatis-Plus 3.5.9, MySQL 8.4, Redis 7.4, RabbitMQ 3.13, PostgreSQL 16 + PGvector, MinIO, Vue 3, Vant, Vitest, Playwright, Docker Compose.
+**Tech Stack:** Java 21, Spring Boot 3.4.1, Spring AI 1.0.0, MyBatis-Plus 3.5.9, Testcontainers 2.0.5, MySQL 8.4, Redis 7.4, RabbitMQ 3.13, PostgreSQL 16 + PGvector, MinIO, Vue 3, Vant, Vitest, Playwright, Docker Compose.
 
 ## Global Constraints
 
@@ -107,7 +107,9 @@ git commit -m "build: add reproducible agentRag configuration"
 
 **Files:**
 - Modify: `pom.xml`
-- Modify: `common/pom.xml`
+- Modify: `web/web-app/pom.xml`
+- Create: `web/web-app/src/main/resources/application-default.yml`
+- Modify: `web/web-app/src/main/resources/application-docker.yml`
 - Create: `web/web-app/src/main/resources/db/migration/V1__lease_baseline.sql`
 - Create: `web/web-app/src/main/resources/db/migration/V2__agent_closed_loop.sql`
 - Create: `web/web-app/src/main/resources/db/migration/V3__demo_seed.sql`
@@ -115,9 +117,10 @@ git commit -m "build: add reproducible agentRag configuration"
 - Test: `web/web-app/src/test/java/com/atguigu/lease/migration/LeaseMigrationIT.java`
 
 **Interfaces:**
-- Produces: Flyway baseline for existing lease tables and `ai_knowledge_doc`; new `ai_appointment_idempotency` and `appointment_event_outbox`; six demo rooms and demo user `13800000000`.
+- Produces: a DDL-only snapshot of the existing lease tables for a fresh isolated Docker database; new `ai_appointment_idempotency` and `appointment_event_outbox`; six fabricated demo rooms and demo user `13800000000`.
+- Safety boundary: the default local profile baselines the existing `lease` schema at V1 and applies only incremental V2+ migrations. The isolated Docker profile executes V1+ against an empty database and refuses non-empty schemas without Flyway history.
 
-- [ ] **Step 1: Add Testcontainers migration test and run RED**
+- [x] **Step 1: Add Testcontainers migration test and run RED**
 
 ```java
 @Testcontainers(disabledWithoutDocker = true)
@@ -139,12 +142,12 @@ class LeaseMigrationIT {
 Run:
 
 ```powershell
-.\mvnw.cmd -pl web/web-app -Dtest=LeaseMigrationIT test
+.\mvnw.cmd -pl web/web-app -am "-Dtest=LeaseMigrationIT" "-Dsurefire.failIfNoSpecifiedTests=false" test
 ```
 
 Expected: RED because Flyway dependencies/migrations are absent.
 
-- [ ] **Step 2: Export DDL only and sanitize it**
+- [x] **Step 2: Export DDL only and sanitize it**
 
 ```powershell
 & 'C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe' --protocol=tcp --host=localhost --user=root --password=123456 --no-data --skip-comments --skip-dump-date --result-file='web\web-app\src\main\resources\db\migration\V1__lease_baseline.sql' lease
@@ -152,7 +155,7 @@ Expected: RED because Flyway dependencies/migrations are absent.
 
 Remove host definers and `CREATE DATABASE` statements. Keep the existing `ai_knowledge_doc` DDL consistent with `db/ai-rental-agent/ai_knowledge_doc.sql`.
 
-- [ ] **Step 3: Add closed-loop tables and fabricated seed data**
+- [x] **Step 3: Add closed-loop tables and fabricated seed data**
 
 ```sql
 create table ai_appointment_idempotency (
@@ -181,17 +184,17 @@ create table appointment_event_outbox (
 
 `V3__demo_seed.sql` uses fixed IDs and `INSERT ... ON DUPLICATE KEY UPDATE` for two regions, three apartments, six rooms, labels, payment types, images, one unavailable room and one demo user. It contains no local user rows.
 
-- [ ] **Step 4: Verify GREEN and repeatability**
+- [x] **Step 4: Verify GREEN and repeatability**
 
 ```powershell
-.\mvnw.cmd -pl web/web-app -Dtest=LeaseMigrationIT test
-.\mvnw.cmd -pl web/web-app -Dtest=LeaseMigrationIT test
+.\mvnw.cmd -pl web/web-app -am "-Dtest=LeaseMigrationIT" "-Dsurefire.failIfNoSpecifiedTests=false" test
+.\mvnw.cmd -pl web/web-app -am "-Dtest=LeaseMigrationIT" "-Dsurefire.failIfNoSpecifiedTests=false" test
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
-git add pom.xml common/pom.xml web/web-app/src/main/resources/db db/pgvector web/web-app/src/test/java/com/atguigu/lease/migration/LeaseMigrationIT.java
+git add pom.xml web/web-app/pom.xml web/web-app/src/main/resources/application-default.yml web/web-app/src/main/resources/application-docker.yml web/web-app/src/main/resources/db db/pgvector web/web-app/src/test/java/com/atguigu/lease/migration docs/superpowers/plans/2026-08-03-ai-rental-agent-closed-loop.md
 git commit -m "feat: add reproducible agent demo database"
 ```
 

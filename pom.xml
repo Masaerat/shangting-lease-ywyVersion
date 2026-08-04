@@ -34,6 +34,7 @@
         <minio.version>8.2.0</minio.version>
         <knife4j.version>4.5.0</knife4j.version>
         <aliyun.sms.version>2.0.23</aliyun.sms.version>
+        <testcontainers.version>2.0.5</testcontainers.version>
         <!-- spring-amqp 版本交给 Spring Boot 3.4 托管,不再手动覆盖 -->
     </properties>
 
@@ -111,5 +112,20 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-mysql</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 
 </project>
