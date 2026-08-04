@@ -1,0 +1,12 @@
+.git
+.idea
+.claude
+.superpowers
+.env
+.env.local
+**/target
+**/node_modules
+docs
+frontend
+web/web-admin/src/main/resources/application.yml
+web/web-app/src/main/resources/application.yml

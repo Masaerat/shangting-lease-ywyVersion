@@ -207,12 +207,13 @@ git commit -m "feat: add reproducible agent demo database"
 - Create: `docker/minio/init.sh`
 - Create: `docker/minio/demo-room.jpg`
 - Create: `scripts/verify-compose.ps1`
+- Modify: `web/pom.xml`
 - Test: `scripts/verify-compose.ps1`
 
 **Interfaces:**
 - Produces: services `mysql`, `redis`, `rabbitmq`, `pgvector`, `minio`, `minio-init`, `web-admin`, `web-app`; Actuator health on ports 8080 and 8081.
 
-- [ ] **Step 1: Write verifier and run RED**
+- [x] **Step 1: Write verifier and run RED**
 
 ```powershell
 $required = @('mysql','redis','rabbitmq','pgvector','minio','web-admin','web-app')
@@ -226,13 +227,13 @@ foreach ($port in 8080,8081) {
 
 Expected: RED because Compose does not exist.
 
-- [ ] **Step 2: Add pinned images and multi-module Java image**
+- [x] **Step 2: Add pinned images and multi-module Java image**
 
 Use `mysql:8.4`, `redis:7.4-alpine`, `rabbitmq:3.13-management-alpine`, `pgvector/pgvector:pg16`, MinIO pinned release, `maven:3.9.9-eclipse-temurin-21` builder and `eclipse-temurin:21-jre` runtime. Build `web-admin` and `web-app` separately from one Dockerfile `APP_MODULE` argument.
 
 `web-app` and `web-admin` run with `SPRING_PROFILES_ACTIVE=docker`; infrastructure services have real health checks and application services wait for healthy dependencies.
 
-- [ ] **Step 3: Verify GREEN**
+- [x] **Step 3: Verify GREEN**
 
 ```powershell
 docker compose config
@@ -241,7 +242,7 @@ docker compose up -d --build mysql redis rabbitmq pgvector minio minio-init web-
 docker compose ps
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add compose.yaml Dockerfile .dockerignore docker scripts/verify-compose.ps1
