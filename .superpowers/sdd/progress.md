@@ -7,6 +7,15 @@ Execution mode: direct in-controller (无运行环境;仅编译 + 单测;运行�
 Build env prefix (每个 mvn/java 调用都要带):
   export JAVA_HOME="/d/SoftWare/JDK/JDK21"; export PATH="$JAVA_HOME/bin:/d/SoftWare/Maven/apache-maven-3.9.16/bin:$PATH"
 
+## 2026-08-05 闭环升级
+
+- [x] Docker/本地双 profile、Flyway V1-V4、脱敏演示数据和本地数据库增量同步。
+- [x] 无 Key fallback SSE、用户会话隔离、结构化房源推荐与知识引用。
+- [x] Redis 预约草稿、显式确认、幂等写入和 Transactional Outbox。
+- [x] Outbox claim、Rabbit publisher confirm、重试/DEAD 和消费去重。
+- [x] H5 AI 助手、预约二次确认 UI、Vitest、Playwright 配置和 Nginx/Compose 服务。
+- [ ] Docker 关闭期间待验收：并发确认、RabbitMQ 恢复、API 闭环、Compose smoke 和 Playwright 实跑。
+
 ## 关键技术决策(实现时已确认/修正)
 - PgVector 双数据源:定义第二个 DataSource 会让 Boot 不再自动建主源,故 PgVectorDataSourceConfiguration **显式定义 MySQL 主源(@Primary)+ pg 源**,整体 @ConditionalOnProperty("app.datasource.pg.url")。
 - AiKnowledgeDoc extends BaseEntity(自带 id/createTime/updateTime/isDeleted)。

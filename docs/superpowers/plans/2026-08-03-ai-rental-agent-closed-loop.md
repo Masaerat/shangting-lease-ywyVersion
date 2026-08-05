@@ -595,6 +595,8 @@ git commit -m "feat: integrate H5 AI rental assistant"
 
 - [ ] **Step 1: Write RED API journey**
 
+2026-08-05: API journey is implemented and compiles. Testcontainers skipped the test because Docker is unavailable; keep this step open until the real HTTP journey runs GREEN.
+
 ```java
 @Test
 void fallbackChatToConfirmedAppointmentIsClosedLoop() {
@@ -612,9 +614,11 @@ void fallbackChatToConfirmedAppointmentIsClosedLoop() {
 
 - [ ] **Step 2: Write RED Playwright journey**
 
+2026-08-05: mobile and desktop projects discover both journeys through `playwright test --list`. Keep this step open until Compose is running and both browser executions pass with screenshots.
+
 Use `390x844` and desktop `1440x900`: demo login, send mixed question, wait for room/citation, create draft, confirm, open “我的预约”, assert the new appointment ID, and capture both pages.
 
-- [ ] **Step 3: Add API smoke script and exact README commands**
+- [x] **Step 3: Add API smoke script and exact README commands**
 
 ```powershell
 Copy-Item .env.example .env
@@ -626,6 +630,8 @@ docker compose up --build
 Document `docker compose down --volumes` as a destructive demo reset command, but do not execute it without a new explicit user request.
 
 - [ ] **Step 4: Run full fresh verification**
+
+2026-08-05: non-Docker compilation, unit tests, type-check, build, script parsing and production dependency audit are GREEN. Container and browser commands remain pending by user request.
 
 ```powershell
 git branch --show-current
@@ -645,7 +651,7 @@ npx playwright test
 
 Then run optional model smoke with valid keys and assert SSE `meta.mode=MODEL`, `RoomSearchTool` output and citations.
 
-- [ ] **Step 5: Audit secrets and unrelated changes**
+- [x] **Step 5: Audit secrets and unrelated changes**
 
 ```powershell
 Set-Location ..\..

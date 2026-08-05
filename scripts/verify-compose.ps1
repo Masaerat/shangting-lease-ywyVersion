@@ -8,7 +8,8 @@ $requiredServices = @(
     'minio',
     'minio-init',
     'web-admin',
-    'web-app'
+    'web-app',
+    'rent-house-h5'
 )
 
 $services = @(docker compose config --services)
@@ -41,6 +42,11 @@ foreach ($port in 8080, 8081) {
     if ($null -eq $health -or $health.status -ne 'UP') {
         throw "application on port $port did not become UP within 120 seconds"
     }
+}
+
+$h5 = Invoke-WebRequest -UseBasicParsing 'http://localhost:8082/'
+if ($h5.StatusCode -ne 200 -or $h5.Content -notmatch '<div id="app"></div>') {
+    throw 'H5 application on port 8082 is not ready'
 }
 
 Write-Host 'Compose services and application health checks passed.'
