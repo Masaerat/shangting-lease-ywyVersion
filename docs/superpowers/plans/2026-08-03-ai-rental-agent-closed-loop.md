@@ -528,11 +528,11 @@ git commit -m "feat: publish appointments through outbox"
 - Consumes: SSE event contract from Task 5 and appointment APIs from Task 6.
 - Produces: `/ai-assistant`; room-detail navigation; explicit confirm; `/myAppointment` result navigation.
 
-- [ ] **Step 1: Copy clean source and add test baseline**
+- [x] **Step 1: Copy clean source and add test baseline**
 
 Use the source manifest from `rg --files`; do not copy `node_modules`, `dist`, `.env.development`, `.env.production` or Git metadata. Preserve `LICENSE`.
 
-- [ ] **Step 2: Write RED tests**
+- [x] **Step 2: Write RED tests**
 
 ```ts
 it('renders streaming recommendations and citations', async () => {
@@ -556,11 +556,11 @@ it('does not confirm before explicit click', async () => {
 
 Run `npm run test:unit`; expected RED because components and test config do not exist.
 
-- [ ] **Step 3: Implement UI and SSE parser**
+- [x] **Step 3: Implement UI and SSE parser**
 
 Use `fetch` stream parsing for POST SSE because native `EventSource` cannot send the authenticated POST body. Reuse the existing Axios token source and send `access-token`. Preserve partial answer on reconnect errors, disable duplicate submits, use Vant action sheet for draft and explicit confirmation, and keep stable mobile dimensions.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 ```powershell
 Set-Location frontend/rent-house-h5
@@ -572,7 +572,7 @@ Set-Location ..\..
 docker compose config
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add frontend/rent-house-h5 compose.yaml

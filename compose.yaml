@@ -186,6 +186,25 @@ services:
     mem_limit: 448m
     restart: unless-stopped
 
+  rent-house-h5:
+    build:
+      context: ./frontend/rent-house-h5
+      dockerfile: Dockerfile
+      args:
+        VITE_APP_BASE_URL: /
+    ports:
+      - "8082:80"
+    depends_on:
+      web-app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 64m
+    restart: unless-stopped
+
 volumes:
   mysql-data:
   redis-data:
