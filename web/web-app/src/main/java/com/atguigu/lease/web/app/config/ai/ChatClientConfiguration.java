@@ -1,8 +1,10 @@
 package com.atguigu.lease.web.app.config.ai;
 
 import com.atguigu.lease.web.app.tools.RoomSearchTool;
+import com.atguigu.lease.config.ai.AiModelAvailableCondition;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 
 /**
@@ -10,6 +12,7 @@ import org.springframework.context.annotation.Configuration;
  * v1 不注册 QuestionAnswerAdvisor;检索上下文由 RentalChatService 按请求手动注入。
  */
 @Configuration
+@Conditional(AiModelAvailableCondition.class)
 public class ChatClientConfiguration {
 
     @Bean

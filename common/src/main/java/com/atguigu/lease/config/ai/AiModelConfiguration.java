@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 
 /**
@@ -37,7 +38,7 @@ import org.springframework.context.annotation.Configuration;
  * (均带 @ConditionalOnMissingBean)会自动退避,不会产生冲突。
  */
 @Configuration
-@ConditionalOnProperty(name = "spring.ai.openai.api-key")
+@Conditional(AiModelAvailableCondition.class)
 public class AiModelConfiguration {
 
     /** chat 专用 OpenAiApi(主 key)。 */

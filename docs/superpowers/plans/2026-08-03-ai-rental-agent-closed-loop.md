@@ -309,6 +309,11 @@ git commit -m "feat: add docker-only demo login"
 - Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/impl/LocalRentalKnowledgeService.java`
 - Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai/AiRecommendationVo.java`
 - Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai/AiChatMetaVo.java`
+- Create: `web/web-app/src/main/resources/ai/rag-knowledge.md`
+- Create: `common/src/main/java/com/atguigu/lease/config/ai/AiModelAvailableCondition.java`
+- Modify: `common/src/main/java/com/atguigu/lease/config/ai/AiModelConfiguration.java`
+- Modify: `Dockerfile`
+- Modify: `compose.yaml`
 - Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai/impl/RentalChatServiceImpl.java`
 - Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai/ChatSseEvent.java`
 - Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/tools/RoomSearchTool.java`
@@ -320,7 +325,7 @@ git commit -m "feat: add docker-only demo login"
 **Interfaces:**
 - Produces: `RentalChatEngine.mode()` and `chat(ChatExecution execution, Consumer<ChatSseEvent> sink)`; SSE types `meta`, `message`, `recommendations`, `citations`, `done`, `error`.
 
-- [ ] **Step 1: Write RED fallback and isolation tests**
+- [x] **Step 1: Write RED fallback and isolation tests**
 
 ```java
 @Test
@@ -337,30 +342,30 @@ void sameConversationIdUsesDifferentRedisKeysForDifferentUsers() {
 }
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```powershell
 .\mvnw.cmd -pl web/web-app -Dtest=FallbackRentalChatEngineTest,RentalChatServiceImplTest test
 ```
 
-- [ ] **Step 3: Extract existing model logic without changing its behavior**
+- [x] **Step 3: Extract existing model logic without changing its behavior**
 
 Move current `VectorStore.similaritySearch`、prompt assembly、`ChatClient.stream()` and citations into `ModelRentalChatEngine`. Keep `RoomSearchTool` registered in `ChatClientConfiguration`. Make model/vector beans conditional on nonblank AI keys and PG URL.
 
-- [ ] **Step 4: Implement fallback**
+- [x] **Step 4: Implement fallback**
 
 Fallback parses min/max rent and city/district keywords, calls the existing MySQL room query path, retrieves deposit/payment/appointment/repair/checkout sections from `docs/ai-rental-agent/rag-knowledge.md`, and emits the same structured events. It never creates appointments.
 
 `RentalChatServiceImpl` chooses model when available, catches provider/vector errors, emits `mode=FALLBACK`, and retries through fallback. Redis key format is `ai:chat:history:{userId}:{conversationId}`; client-supplied IDs are length/character validated.
 
-- [ ] **Step 5: Verify GREEN and existing model tests**
+- [x] **Step 5: Verify GREEN and existing model tests**
 
 ```powershell
 .\mvnw.cmd -pl web/web-app -Dtest=FallbackRentalChatEngineTest,RentalChatServiceImplTest test
 .\mvnw.cmd -pl web/web-app -am -DskipTests package
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add common/src/main/java/com/atguigu/lease/config/ai/PgVectorDataSourceConfiguration.java web/web-app/src/main/java/com/atguigu/lease/web/app/config/ai web/web-app/src/main/java/com/atguigu/lease/web/app/service/ai web/web-app/src/main/java/com/atguigu/lease/web/app/tools/RoomSearchTool.java web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai

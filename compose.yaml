@@ -168,6 +168,8 @@ services:
         APP_MODULE: web/web-app
     environment:
       <<: *app-environment
+      AI_CHAT_API_KEY: ${AI_CHAT_API_KEY:-}
+      AI_EMBED_API_KEY: ${AI_EMBED_API_KEY:-}
       DEMO_LOGIN_ENABLED: ${DEMO_LOGIN_ENABLED:-true}
       DEMO_LOGIN_PHONE: ${DEMO_LOGIN_PHONE:-13800000000}
       DEMO_LOGIN_CODE: ${DEMO_LOGIN_CODE:-888888}

@@ -4,16 +4,10 @@ import com.atguigu.lease.common.constant.AiRedisConstant;
 import com.atguigu.lease.common.login.LoginUserHolder;
 import com.atguigu.lease.common.utils.CacheUtil;
 import com.atguigu.lease.config.ai.RagProperties;
+import com.atguigu.lease.web.app.service.ai.RentalChatEngine;
 import com.atguigu.lease.web.app.service.ai.RentalChatService;
 import com.atguigu.lease.web.app.vo.ai.ChatRequestVo;
 import com.atguigu.lease.web.app.vo.ai.ChatSseEvent;
-import com.atguigu.lease.web.app.vo.ai.RoomCitationVo;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -22,24 +16,28 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 @Service
 public class RentalChatServiceImpl implements RentalChatService {
 
-    private static final String NS_ROOMS = "rooms";
+    private static final Pattern CONVERSATION_ID = Pattern.compile("[A-Za-z0-9_-]{1,64}");
 
-    private final ChatClient rentalChatClient;
-    private final VectorStore vectorStore;
+    private final RentalChatEngine modelEngine;
+    private final RentalChatEngine fallbackEngine;
     private final RagProperties ragProperties;
     private final CacheUtil cacheUtil;
     private final Executor executor;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public RentalChatServiceImpl(ChatClient rentalChatClient, VectorStore vectorStore,
-                                 RagProperties ragProperties, CacheUtil cacheUtil,
-                                 @Qualifier("applicationTaskExecutor") Executor executor) {
-        this.rentalChatClient = rentalChatClient;
-        this.vectorStore = vectorStore;
+    public RentalChatServiceImpl(
+            @Qualifier("modelRentalChatEngine") RentalChatEngine modelEngine,
+            @Qualifier("fallbackRentalChatEngine") RentalChatEngine fallbackEngine,
+            RagProperties ragProperties,
+            CacheUtil cacheUtil,
+            @Qualifier("applicationTaskExecutor") Executor executor) {
+        this.modelEngine = modelEngine;
+        this.fallbackEngine = fallbackEngine;
         this.ragProperties = ragProperties;
         this.cacheUtil = cacheUtil;
         this.executor = executor;
@@ -47,111 +45,109 @@ public class RentalChatServiceImpl implements RentalChatService {
 
     @Override
     public void chat(ChatRequestVo request, SseEmitter emitter) {
+        Long userId = currentUserId();
         executor.execute(() -> {
             try {
-                String conversationId = request.getConversationId();
-                if (conversationId == null || conversationId.isBlank()) {
-                    Long uid = currentUserId();
-                    conversationId = "u-" + (uid == null ? "anon" : uid);
-                }
-                final String convId = conversationId;
-
-                // 1. 取历史
-                List<String> history = loadHistory(convId);
-
-                // 2. 手动检索(混合来源:rooms + doc)
-                List<Document> retrieved = vectorStore.similaritySearch(SearchRequest.builder()
-                        .query(request.getMessage())
-                        .topK(ragProperties.getTopK())
-                        .similarityThreshold(ragProperties.getSimilarityThreshold())
-                        .build());
-
-                // 3. 拼上下文 + 提问
-                String context = buildContext(retrieved);
-                StringBuilder promptBuilder = new StringBuilder();
-                if (!context.isBlank()) promptBuilder.append("参考资料:\n").append(context).append("\n\n");
-                for (String h : history) promptBuilder.append(h).append('\n');
-                promptBuilder.append("用户:").append(request.getMessage());
-
-                // 4. 流式回答
-                StringBuilder answer = new StringBuilder();
-                rentalChatClient.prompt().user(promptBuilder.toString()).stream().content().subscribe(
-                        token -> { answer.append(token); send(emitter, "message", token); },
-                        err -> send(emitter, "error", err.getMessage() == null ? err.toString() : err.getMessage()),
-                        () -> {
-                            send(emitter, "done", toCitations(retrieved));
-                            emitter.complete();
-                            saveHistory(convId, request.getMessage(), answer.toString());
-                        });
-            } catch (Exception e) {
-                send(emitter, "error", e.getMessage() == null ? e.toString() : e.getMessage());
-                emitter.completeWithError(e);
+                chat(userId, request, event -> send(emitter, event));
+                emitter.complete();
+            } catch (Exception error) {
+                send(emitter, new ChatSseEvent("error", message(error)));
+                emitter.completeWithError(error);
             }
         });
     }
 
-    /** 把检索文档转成上下文文本(纯函数,便于测试)。 */
-    public String buildContext(List<Document> docs) {
-        if (docs == null || docs.isEmpty()) return "";
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < docs.size(); i++) {
-            sb.append('[').append(i + 1).append("] ").append(docs.get(i).getText()).append('\n');
+    public void chat(Long userId, ChatRequestVo request, Consumer<ChatSseEvent> sink) {
+        if (userId == null) {
+            throw new IllegalArgumentException("Authenticated user is required");
         }
-        return sb.toString();
-    }
-
-    /** 把 namespace=rooms 的检索结果转成引用(纯函数,便于测试)。 */
-    public List<RoomCitationVo> toCitations(List<Document> docs) {
-        if (docs == null) return List.of();
-        List<RoomCitationVo> list = new ArrayList<>();
-        for (Document d : docs) {
-            if (!NS_ROOMS.equals(d.getMetadata().get("namespace"))) continue;
-            Object ref = d.getMetadata().get("roomRef");
-            list.add(new RoomCitationVo(
-                    ref == null ? null : Long.valueOf(ref.toString()),
-                    (String) d.getMetadata().get("source"),
-                    null, null, NS_ROOMS));
+        if (request == null || request.getMessage() == null || request.getMessage().isBlank()) {
+            throw new IllegalArgumentException("Chat message is required");
         }
-        return list;
+        String conversationId = normalizeConversationId(request.getConversationId());
+        List<String> history = loadHistory(userId, conversationId);
+        RentalChatEngine.ChatExecution execution = new RentalChatEngine.ChatExecution(
+                userId, conversationId, request.getMessage(), history);
+        StringBuilder answer = new StringBuilder();
+        Consumer<ChatSseEvent> capturingSink = event -> {
+            if ("message".equals(event.getType()) && event.getPayload() != null) {
+                answer.append(event.getPayload());
+            }
+            sink.accept(event);
+        };
+
+        boolean modelSucceeded = false;
+        if (modelEngine != null && modelEngine.available()) {
+            try {
+                modelEngine.chat(execution, capturingSink);
+                modelSucceeded = true;
+            } catch (RuntimeException ignored) {
+                answer.setLength(0);
+            }
+        }
+        if (!modelSucceeded) {
+            fallbackEngine.chat(execution, capturingSink);
+        }
+        saveHistory(userId, conversationId, request.getMessage(), answer.toString());
     }
 
-    private void send(SseEmitter emitter, String type, Object payload) {
-        try {
-            emitter.send(SseEmitter.event().name("chat").data(new ChatSseEvent(type, payload)));
-        } catch (Exception ignored) { /* 客户端可能已断开 */ }
+    public String historyKey(Long userId, String conversationId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User id is required");
+        }
+        return AiRedisConstant.CHAT_HISTORY_PREFIX + userId + ":" + normalizeConversationId(conversationId);
     }
 
-    /** 历史以换行分隔的字符串存储;返回最近若干行。 */
-    private List<String> loadHistory(String conversationId) {
-        String raw = cacheUtil.get(historyKey(conversationId), String.class);
-        if (raw == null || raw.isBlank()) return List.of();
+    private String normalizeConversationId(String conversationId) {
+        String normalized = conversationId == null || conversationId.isBlank() ? "default" : conversationId;
+        if (!CONVERSATION_ID.matcher(normalized).matches()) {
+            throw new IllegalArgumentException("Conversation id contains unsupported characters");
+        }
+        return normalized;
+    }
+
+    private List<String> loadHistory(Long userId, String conversationId) {
+        String raw = cacheUtil.get(historyKey(userId, conversationId), String.class);
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
         List<String> lines = new ArrayList<>();
-        for (String line : raw.split("\n")) {
-            if (!line.isBlank()) lines.add(line);
+        for (String line : raw.split("\\R")) {
+            if (!line.isBlank()) {
+                lines.add(line);
+            }
         }
         return lines;
     }
 
-    private void saveHistory(String conversationId, String userMsg, String answer) {
-        List<String> lines = new ArrayList<>(loadHistory(conversationId));
-        lines.add("用户:" + userMsg);
+    private void saveHistory(Long userId, String conversationId, String userMessage, String answer) {
+        List<String> lines = new ArrayList<>(loadHistory(userId, conversationId));
+        lines.add("用户:" + userMessage);
         lines.add("顾问:" + answer);
-        // 保留最近 historyTurns 轮(每轮 2 行)
         int maxLines = Math.max(2, ragProperties.getHistoryTurns() * 2);
-        while (lines.size() > maxLines) lines.remove(0);
-        cacheUtil.set(historyKey(conversationId), String.join("\n", lines),
-                AiRedisConstant.CHAT_HISTORY_TTL_SEC, TimeUnit.SECONDS);
+        while (lines.size() > maxLines) {
+            lines.removeFirst();
+        }
+        cacheUtil.set(
+                historyKey(userId, conversationId),
+                String.join("\n", lines),
+                AiRedisConstant.CHAT_HISTORY_TTL_SEC,
+                TimeUnit.SECONDS);
     }
 
-    private String historyKey(String conversationId) {
-        return AiRedisConstant.CHAT_HISTORY_PREFIX + conversationId;
+    private void send(SseEmitter emitter, ChatSseEvent event) {
+        try {
+            emitter.send(SseEmitter.event().name("chat").data(event));
+        } catch (Exception ignored) {
+            // The client may have disconnected while an asynchronous response was in flight.
+        }
     }
 
     private Long currentUserId() {
-        try {
-            return LoginUserHolder.getLoginUser() == null ? null : LoginUserHolder.getLoginUser().getUserId();
-        } catch (Exception e) {
-            return null;
-        }
+        return LoginUserHolder.getLoginUser() == null ? null : LoginUserHolder.getLoginUser().getUserId();
+    }
+
+    private String message(Exception error) {
+        return error.getMessage() == null ? error.toString() : error.getMessage();
     }
 }
