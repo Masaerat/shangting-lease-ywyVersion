@@ -130,13 +130,14 @@ public class RabbitMQConfig {
 @Bean
 public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
     RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
+    rabbitTemplate.setMandatory(true);
     // 设置消息转换器
     rabbitTemplate.setMessageConverter(new Jackson2JsonMessageConverter());
     // 设置消息确认回调
     rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -> {
         Logger logger = LoggerFactory.getLogger(RabbitMQConfig.class);
         if (ack) {
-            logger.info("消息发送成功: {}", correlationData.getId());
+            logger.info("消息发送成功: {}", correlationData == null ? "legacy" : correlationData.getId());
         } else {
             logger.error("消息发送失败: {}", cause);
         }

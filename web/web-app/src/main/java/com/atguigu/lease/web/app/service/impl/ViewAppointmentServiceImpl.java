@@ -1,22 +1,27 @@
 package com.atguigu.lease.web.app.service.impl;
 
 import com.atguigu.lease.model.entity.ViewAppointment;
+import com.atguigu.lease.model.entity.AppointmentEventOutbox;
 import com.atguigu.lease.model.enums.AppointmentStatus;
-import com.atguigu.lease.service.MessageService;
+import com.atguigu.lease.common.utils.JsonUtil;
+import com.atguigu.lease.web.app.mapper.AppointmentEventOutboxMapper;
 import com.atguigu.lease.web.app.mapper.ViewAppointmentMapper;
 import com.atguigu.lease.web.app.service.ApartmentInfoService;
 import com.atguigu.lease.web.app.service.ViewAppointmentService;
 import com.atguigu.lease.web.app.vo.apartment.ApartmentItemVo;
 import com.atguigu.lease.web.app.vo.appointment.AppointmentDetailVo;
 import com.atguigu.lease.web.app.vo.appointment.AppointmentItemVo;
-import com.atguigu.lease.message.appointment.AppointmentMessage;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Date;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @author liubo
@@ -27,15 +32,27 @@ import java.util.List;
 public class ViewAppointmentServiceImpl extends ServiceImpl<ViewAppointmentMapper, ViewAppointment>
         implements ViewAppointmentService {
 
-    @Autowired
-    private ViewAppointmentMapper viewAppointmentMapper;
+    private final ViewAppointmentMapper viewAppointmentMapper;
+    private final ApartmentInfoService apartmentInfoService;
+    private final AppointmentEventOutboxMapper outboxMapper;
+    private final Clock clock;
 
     @Autowired
-    private ApartmentInfoService apartmentInfoService;
+    public ViewAppointmentServiceImpl(ViewAppointmentMapper viewAppointmentMapper,
+                                      ApartmentInfoService apartmentInfoService,
+                                      AppointmentEventOutboxMapper outboxMapper) {
+        this(viewAppointmentMapper, apartmentInfoService, outboxMapper, Clock.systemDefaultZone());
+    }
 
-    @Autowired
-    private MessageService messageService;
-
+    ViewAppointmentServiceImpl(ViewAppointmentMapper viewAppointmentMapper,
+                               ApartmentInfoService apartmentInfoService,
+                               AppointmentEventOutboxMapper outboxMapper,
+                               Clock clock) {
+        this.viewAppointmentMapper = viewAppointmentMapper;
+        this.apartmentInfoService = apartmentInfoService;
+        this.outboxMapper = outboxMapper;
+        this.clock = clock;
+    }
 
     @Override
     public List<AppointmentItemVo> listItemByUserId(Long userId) {
@@ -59,39 +76,40 @@ public class ViewAppointmentServiceImpl extends ServiceImpl<ViewAppointmentMappe
     }
 
     @Override
+    @Transactional
     public boolean saveWithMessage(ViewAppointment entity) {
-        // 确保预约状态设置正确
         if (entity.getAppointmentStatus() == null) {
             entity.setAppointmentStatus(AppointmentStatus.WAITING);
         }
-
-        // 保存到数据库
-        boolean result = this.save(entity);
-
-        if (result) {
-            // 创建消息对象
-            AppointmentMessage message = AppointmentMessage.builder()
-                    .appointmentId(entity.getId())
-                    .userId(entity.getUserId())
-                    .name(entity.getName())
-                    .phone(entity.getPhone())
-                    .apartmentId(entity.getApartmentId())
-                    .appointmentTime(entity.getAppointmentTime())
-                    .additionalInfo(entity.getAdditionalInfo())
-                    .appointmentStatus(entity.getAppointmentStatus().name())
-                    .messageType("CREATE")
-                    .createTime(new Date())
-                    .build();
-
-            try {
-                // 发送创建消息（用于通知）
-                messageService.sendAppointmentCreateMessage(message);
-            } catch (Exception e) {
-                // 如果消息发送失败，记录日志但不影响保存操作
-                System.err.println("消息发送失败，但预约已保存: " + e.getMessage());
-            }
+        if (viewAppointmentMapper.insert(entity) != 1 || entity.getId() == null) {
+            return false;
         }
 
-        return result;
+        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), clock.getZone());
+        AppointmentEventOutbox outbox = new AppointmentEventOutbox();
+        outbox.setAggregateId(entity.getId());
+        outbox.setEventType("APPOINTMENT_CREATED");
+        outbox.setPayloadJson(payload(entity));
+        outbox.setStatus("PENDING");
+        outbox.setAttempts(0);
+        outbox.setNextAttemptAt(now);
+        outbox.setCreatedAt(now);
+        outboxMapper.insert(outbox);
+        return true;
+    }
+
+    private static String payload(ViewAppointment appointment) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("appointmentId", appointment.getId());
+        payload.put("userId", appointment.getUserId());
+        payload.put("roomId", appointment.getRoomId());
+        payload.put("apartmentId", appointment.getApartmentId());
+        payload.put("name", appointment.getName());
+        payload.put("phone", appointment.getPhone());
+        payload.put("appointmentTime", appointment.getAppointmentTime());
+        payload.put("additionalInfo", appointment.getAdditionalInfo());
+        payload.put("appointmentStatus", appointment.getAppointmentStatus().name());
+        payload.put("messageType", "CREATE");
+        return JsonUtil.toJsonString(payload);
     }
 }

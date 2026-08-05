@@ -3,3 +3,14 @@ spring:
     enabled: true
     baseline-on-migrate: true
     baseline-version: 1
+  rabbitmq:
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+
+app:
+  outbox:
+    enabled: true
+    fixed-delay-ms: 1000
+    initial-delay-ms: 2000

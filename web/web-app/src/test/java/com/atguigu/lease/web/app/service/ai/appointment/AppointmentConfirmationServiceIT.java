@@ -27,7 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.rabbitmq.listener.simple.auto-startup=false",
         "spring.rabbitmq.listener.direct.auto-startup=false",
         "spring.ai.openai.api-key=",
-        "app.datasource.pg.url="
+        "app.datasource.pg.url=",
+        "app.outbox.enabled=false"
 })
 @Testcontainers(disabledWithoutDocker = true)
 class AppointmentConfirmationServiceIT {

@@ -25,6 +25,10 @@ spring:
     username: ${RABBITMQ_USER:lease}
     password: ${RABBITMQ_PASSWORD:lease}
     virtual-host: /
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
   autoconfigure:
     exclude:
       - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration
@@ -78,6 +82,10 @@ knife4j:
     language: zh_cn
 
 app:
+  outbox:
+    enabled: true
+    fixed-delay-ms: 1000
+    initial-delay-ms: 2000
   datasource:
     pg:
       url: ${PG_URL:jdbc:postgresql://pgvector:5432/lease_vec}

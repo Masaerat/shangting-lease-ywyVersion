@@ -5,7 +5,7 @@ import com.atguigu.lease.message.appointment.AppointmentMessage;
 import com.atguigu.lease.message.appointment.AppointmentNotificationMessage;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.stereotype.Component;
 
 import java.util.Date;
@@ -18,11 +18,17 @@ public class AppointmentMessageConsumer {
 
     private static final Logger logger = LoggerFactory.getLogger(AppointmentMessageConsumer.class);
 
-    @Autowired
-    private RabbitTemplate rabbitTemplate;
+    private final RabbitTemplate rabbitTemplate;
+    private final AppointmentEventDeduplicator deduplicator;
 
     private static final int MAX_RETRIES = 3;
     private static final long RETRY_DELAY_MS = 1000;
+
+    public AppointmentMessageConsumer(RabbitTemplate rabbitTemplate,
+                                      AppointmentEventDeduplicator deduplicator) {
+        this.rabbitTemplate = rabbitTemplate;
+        this.deduplicator = deduplicator;
+    }
 
     /**
      * 处理预约创建消息
@@ -30,6 +36,11 @@ public class AppointmentMessageConsumer {
     @RabbitListener(queues = RabbitMQConfig.APPOINTMENT_CREATE_QUEUE)
     public void handleAppointmentCreate(AppointmentMessage message) {
         logger.info("收到预约创建消息，预约ID: {}", message.getAppointmentId());
+
+        if (!deduplicator.tryClaim(message.getEventId())) {
+            logger.info("跳过已处理或正在处理的预约事件: {}", message.getEventId());
+            return;
+        }
 
         int retryCount = 0;
         while (retryCount < MAX_RETRIES) {
@@ -53,6 +64,7 @@ public class AppointmentMessageConsumer {
                         .build();
 
                 rabbitTemplate.convertAndSend(RabbitMQConfig.APPOINTMENT_EXCHANGE, RabbitMQConfig.NOTIFY_ROUTING_KEY, notificationMessage);
+                deduplicator.markProcessed(message.getEventId());
                 logger.info("预约创建消息处理成功，已发送通知消息，预约ID: {}", message.getAppointmentId());
                 return; // 成功则返回
 
@@ -61,15 +73,16 @@ public class AppointmentMessageConsumer {
                 logger.error("处理预约创建消息失败，尝试次数: {}/{}，错误: {}", retryCount, MAX_RETRIES, e.getMessage());
                 if (retryCount >= MAX_RETRIES) {
                     logger.error("处理预约创建消息失败，已重试" + MAX_RETRIES + "次，预约ID: {}", message.getAppointmentId());
-                    // 可以在这里添加死信处理或告警逻辑
-                    return;
+                    deduplicator.release(message.getEventId());
+                    throw new AmqpRejectAndDontRequeueException("预约通知处理失败", e);
                 }
                 try {
                     Thread.sleep(RETRY_DELAY_MS);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
+                    deduplicator.release(message.getEventId());
                     logger.error("处理预约创建消息被中断，预约ID: {}", message.getAppointmentId());
-                    return;
+                    throw new AmqpRejectAndDontRequeueException("预约通知处理被中断", ie);
                 }
             }
         }

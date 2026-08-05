@@ -444,8 +444,17 @@ git commit -m "feat: add confirmed AI appointment workflow"
 - Create: `common/src/main/java/com/atguigu/lease/outbox/AppointmentOutboxPublisher.java`
 - Create: `common/src/main/java/com/atguigu/lease/outbox/AppointmentOutboxRepository.java`
 - Create: `common/src/main/java/com/atguigu/lease/outbox/OutboxPublishScheduler.java`
+- Create: `common/src/main/java/com/atguigu/lease/outbox/RabbitAppointmentEventSender.java`
+- Create: `common/src/main/java/com/atguigu/lease/consumer/appointment/AppointmentEventDeduplicator.java`
 - Modify: `common/src/main/java/com/atguigu/lease/config/RabbitMQConfig.java`
 - Modify: `common/src/main/java/com/atguigu/lease/consumer/appointment/AppointmentMessageConsumer.java`
+- Modify: `common/src/main/java/com/atguigu/lease/message/appointment/AppointmentMessage.java`
+- Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/impl/ViewAppointmentServiceImpl.java`
+- Modify: `web/web-app/src/main/resources/application-default.yml`
+- Modify: `web/web-app/src/main/resources/application-docker.yml`
+- Test: `web/web-app/src/test/java/com/atguigu/lease/outbox/AppointmentOutboxPublisherTest.java`
+- Test: `web/web-app/src/test/java/com/atguigu/lease/consumer/appointment/AppointmentMessageConsumerTest.java`
+- Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/impl/ViewAppointmentServiceImplTest.java`
 - Test: `web/web-app/src/test/java/com/atguigu/lease/outbox/AppointmentOutboxPublisherIT.java`
 
 **Interfaces:**
@@ -453,6 +462,8 @@ git commit -m "feat: add confirmed AI appointment workflow"
 - Produces: publisher-confirmed states `PENDING`, `PUBLISHED`, `DEAD`; at most five attempts.
 
 - [ ] **Step 1: Write and run RED recovery test**
+
+2026-08-05: recovery IT is written and compiles, but is skipped because Docker is unavailable. RED unit tests for publish retry/dead state, consumer deduplication/rejection, and transactional legacy appointment Outbox all ran as expected.
 
 ```java
 @Test
@@ -473,17 +484,19 @@ void pendingEventPublishesAfterBrokerRecovery() {
 .\mvnw.cmd -pl web/web-app -Dtest=AppointmentOutboxPublisherIT test
 ```
 
-- [ ] **Step 2: Implement claim, confirms and backoff**
+- [x] **Step 2: Implement claim, confirms and backoff**
 
-Claim with `FOR UPDATE SKIP LOCKED`, publish event ID as correlation ID, mark `PUBLISHED` only after confirm, and persist `next_attempt_at` with exponential backoff. Consumer deduplicates by event ID. Existing direct appointment publisher is removed from `ViewAppointmentServiceImpl` only after this test is GREEN.
+Claim with `FOR UPDATE SKIP LOCKED`, publish event ID as correlation ID, mark `PUBLISHED` only after confirm, and persist `next_attempt_at` with exponential backoff. Consumer deduplicates by event ID. Existing direct appointment publisher is replaced with a transactional Outbox write after its unit behavior is GREEN; container recovery verification remains open.
 
 - [ ] **Step 3: Verify GREEN**
+
+2026-08-05 non-Docker verification: 31 tests GREEN and package GREEN. `AppointmentOutboxPublisherIT` is skipped until Docker is available.
 
 ```powershell
 .\mvnw.cmd -pl web/web-app -Dtest=AppointmentOutboxPublisherIT test
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add common/src/main/java/com/atguigu/lease/outbox common/src/main/java/com/atguigu/lease/config/RabbitMQConfig.java common/src/main/java/com/atguigu/lease/consumer/appointment/AppointmentMessageConsumer.java web/web-app/src/test/java/com/atguigu/lease/outbox web/web-app/src/main/java/com/atguigu/lease/web/app/service/impl/ViewAppointmentServiceImpl.java
