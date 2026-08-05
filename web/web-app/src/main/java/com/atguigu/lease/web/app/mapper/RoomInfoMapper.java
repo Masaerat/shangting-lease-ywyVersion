@@ -6,6 +6,7 @@ import com.atguigu.lease.web.app.vo.room.RoomQueryVo;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import org.apache.ibatis.annotations.Select;
 
 import java.math.BigDecimal;
 
@@ -22,4 +23,7 @@ public interface RoomInfoMapper extends BaseMapper<RoomInfo> {
     BigDecimal selectMinRentByApartmentId(Long id);
 
     IPage<RoomItemVo> pageItemByApartmentId(IPage<RoomItemVo> page, Long id);
+
+    @Select("SELECT * FROM room_info WHERE id = #{id} AND is_release = 1 AND is_deleted = 0 FOR UPDATE")
+    RoomInfo selectReleasedByIdForUpdate(Long id);
 }

@@ -34,6 +34,7 @@ class LeaseMigrationIT {
         assertThat(countWhere("user_info", "phone = '13800000000' AND is_deleted = 0")).isEqualTo(1);
         assertThat(count("ai_appointment_idempotency")).isZero();
         assertThat(count("appointment_event_outbox")).isZero();
+        assertThat(columnCount("view_appointment", "room_id")).isEqualTo(1);
     }
 
     private long count(String table) throws SQLException {
@@ -48,6 +49,22 @@ class LeaseMigrationIT {
                      "SELECT COUNT(*) FROM " + table + " WHERE " + condition)) {
             resultSet.next();
             return resultSet.getLong(1);
+        }
+    }
+
+    private long columnCount(String table, String column) throws SQLException {
+        try (Connection connection = DriverManager.getConnection(
+                MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+             java.sql.PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COUNT(*) FROM information_schema.columns
+                     WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+                     """)) {
+            statement.setString(1, table);
+            statement.setString(2, column);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getLong(1);
+            }
         }
     }
 }

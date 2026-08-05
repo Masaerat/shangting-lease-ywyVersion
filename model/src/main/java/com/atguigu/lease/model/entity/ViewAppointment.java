@@ -31,6 +31,10 @@ public class ViewAppointment extends BaseEntity {
     @TableField(value = "apartment_id")
     private Long apartmentId;
 
+    @Schema(description = "预约房间id")
+    @TableField(value = "room_id")
+    private Long roomId;
+
     @Schema(description = "预约时间")
     @TableField(value = "appointment_time")
     private Date appointmentTime;

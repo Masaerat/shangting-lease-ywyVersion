@@ -387,15 +387,17 @@ git commit -m "feat: add resilient rental chat fallback"
 - Create: `model/src/main/java/com/atguigu/lease/model/entity/AppointmentEventOutbox.java`
 - Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/mapper/AiAppointmentIdempotencyMapper.java`
 - Create: `web/web-app/src/main/java/com/atguigu/lease/web/app/mapper/AppointmentEventOutboxMapper.java`
-- Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/ViewAppointmentService.java`
-- Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/service/impl/ViewAppointmentServiceImpl.java`
+- Create: `web/web-app/src/main/resources/db/migration/V4__appointment_room_link.sql`
+- Modify: `model/src/main/java/com/atguigu/lease/model/entity/ViewAppointment.java`
+- Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/mapper/RoomInfoMapper.java`
+- Modify: `web/web-app/src/main/java/com/atguigu/lease/web/app/mapper/ViewAppointmentMapper.java`
 - Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/appointment/AppointmentDraftServiceTest.java`
 - Test: `web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/appointment/AppointmentConfirmationServiceIT.java`
 
 **Interfaces:**
 - Produces: `POST /app/ai/appointments/draft`; `POST /app/ai/appointments/confirm`; Outbox row in same transaction as appointment.
 
-- [ ] **Step 1: Write RED validation and concurrency tests**
+- [x] **Step 1: Write RED validation and concurrency tests**
 
 ```java
 @Test
@@ -411,23 +413,25 @@ void concurrentConfirmationCreatesOneAppointmentAndOneOutboxEvent() {
 
 Add tests for expired token, wrong user, past time, unavailable room, invalid phone and duplicate active appointment.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```powershell
 .\mvnw.cmd -pl web/web-app -Dtest=AppointmentDraftServiceTest,AppointmentConfirmationServiceIT test
 ```
 
-- [ ] **Step 3: Implement two-phase mutation boundary**
+- [x] **Step 3: Implement two-phase mutation boundary**
 
-Drafts are immutable Redis JSON under a random 256-bit token, TTL 10 minutes, namespaced by user. The durable table stores only SHA-256 token hash. Confirmation uses Redis atomic `PENDING -> PROCESSING`, revalidates room/time, and in one `@Transactional` method inserts `view_appointment`, idempotency and `appointment_event_outbox`. Duplicate-key races load the existing appointment and set `idempotentReplay=true`.
+Drafts are immutable Redis JSON under a random 256-bit token, TTL 10 minutes, namespaced by user. The durable table stores only SHA-256 token hash. Confirmation uses a Redis `SET NX` short claim, revalidates room/time while locking the room row, and in one `TransactionTemplate` transaction inserts `view_appointment`, idempotency and `appointment_event_outbox`. Duplicate-key races load the existing appointment and set `idempotentReplay=true`.
 
 - [ ] **Step 4: Verify GREEN**
 
+2026-08-05 non-Docker verification: 24 unit/profile tests GREEN, local Flyway V4 migration GREEN, package GREEN. `AppointmentConfirmationServiceIT` compiles and is skipped because Docker is unavailable; keep this step open until its concurrent container test runs GREEN.
+
 ```powershell
 .\mvnw.cmd -pl web/web-app -Dtest=AppointmentDraftServiceTest,AppointmentConfirmationServiceIT test
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add model/src/main/java/com/atguigu/lease/model/entity/AiAppointmentIdempotency.java model/src/main/java/com/atguigu/lease/model/entity/AppointmentEventOutbox.java web/web-app/src/main/java/com/atguigu/lease/web/app/controller/ai web/web-app/src/main/java/com/atguigu/lease/web/app/mapper web/web-app/src/main/java/com/atguigu/lease/web/app/service web/web-app/src/main/java/com/atguigu/lease/web/app/vo/ai/appointment web/web-app/src/test/java/com/atguigu/lease/web/app/service/ai/appointment

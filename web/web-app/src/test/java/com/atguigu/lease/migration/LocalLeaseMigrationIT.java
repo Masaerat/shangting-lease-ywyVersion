@@ -31,7 +31,7 @@ class LocalLeaseMigrationIT {
 
         flyway.migrate();
 
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("3");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("4");
         assertThat(countWhere("room_info", "id < 900000")).isEqualTo(14);
         assertThat(countWhere("apartment_info", "id < 900000")).isEqualTo(3);
         assertThat(countWhere("graph_info", "id < 900000")).isEqualTo(50);
@@ -40,6 +40,7 @@ class LocalLeaseMigrationIT {
         assertThat(countWhere("user_info", "id = 990001 AND phone = '13800000000'")).isEqualTo(1);
         assertThat(count("ai_appointment_idempotency")).isZero();
         assertThat(count("appointment_event_outbox")).isZero();
+        assertThat(columnCount("view_appointment", "room_id")).isEqualTo(1);
     }
 
     private long count(String table) throws SQLException {
@@ -53,6 +54,21 @@ class LocalLeaseMigrationIT {
                      "SELECT COUNT(*) FROM " + table + " WHERE " + condition)) {
             resultSet.next();
             return resultSet.getLong(1);
+        }
+    }
+
+    private long columnCount(String table, String column) throws SQLException {
+        try (Connection connection = DriverManager.getConnection(URL, USER, PASSWORD);
+             java.sql.PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COUNT(*) FROM information_schema.columns
+                     WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+                     """)) {
+            statement.setString(1, table);
+            statement.setString(2, column);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getLong(1);
+            }
         }
     }
 }
