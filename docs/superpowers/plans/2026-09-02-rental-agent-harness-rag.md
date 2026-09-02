@@ -339,8 +339,8 @@ git diff --check
 - 通过确认 API 后调用预约查询接口，能看到一条新记录。
 - RabbitMQ 不可用时预约仍存在，Outbox 状态不是丢失。
 
-- [ ] Task 5 完成
-- [ ] Task 5 独立提交：`feat: harden rental appointment flow`
+- [x] Task 5 完成（2026-09-02：复用现有表并强化确认查询，排除已存在生效租约的房间；验证草稿 TTL/用户隔离、二次校验、幂等、事务三写和 Outbox 重试，21 个非 Docker 测试通过；并发 Testcontainers IT 按约束未执行）
+- [x] Task 5 独立提交：`feat: harden rental appointment flow`
 
 ## Task 6：完成后端 API/SSE 闭环验收
 

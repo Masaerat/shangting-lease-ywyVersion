@@ -46,7 +46,7 @@ class AppointmentDraftServiceTest {
     }
 
     @Test
-    void createsTenMinuteDraftForReleasedRoom() {
+    void createsTenMinuteDraftForReleasedRoomWithoutPersistingAnAppointment() {
         when(roomInfoMapper.selectById(ROOM_ID)).thenReturn(room(ReleaseStatus.RELEASED));
         AppointmentDraftRequest request = validRequest();
 
@@ -58,6 +58,7 @@ class AppointmentDraftServiceTest {
         ArgumentCaptor<AppointmentDraft> draft = ArgumentCaptor.forClass(AppointmentDraft.class);
         verify(draftStore).save(eq(USER_ID), eq("fixed-token"), draft.capture(), eq(NOW.plusSeconds(600)));
         assertThat(draft.getValue().apartmentId()).isEqualTo(920001L);
+        verify(roomInfoMapper).selectById(ROOM_ID);
     }
 
     @Test

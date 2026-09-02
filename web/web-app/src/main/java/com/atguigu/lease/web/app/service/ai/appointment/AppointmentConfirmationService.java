@@ -28,6 +28,7 @@ import java.time.ZoneId;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 public class AppointmentConfirmationService {
@@ -112,7 +113,7 @@ public class AppointmentConfirmationService {
             throw error("预约时间必须晚于当前时间", ResultCodeEnum.PARAM_ERROR);
         }
         RoomInfo room = roomInfoMapper.selectReleasedByIdForUpdate(draft.roomId());
-        if (room == null || !room.getApartmentId().equals(draft.apartmentId())) {
+        if (room == null || !Objects.equals(room.getApartmentId(), draft.apartmentId())) {
             throw error("该房间当前不可预约", ResultCodeEnum.DATA_ERROR);
         }
         if (appointmentMapper.countActiveByUserAndRoom(userId, draft.roomId()) > 0) {

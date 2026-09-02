@@ -135,6 +135,21 @@ class AppointmentConfirmationServiceTest {
     }
 
     @Test
+    void rejectsDraftOwnedByAnotherUser() {
+        AppointmentDraft foreignDraft = new AppointmentDraft(
+                960002L, ROOM_ID, 920001L, "其他用户", "13900000000",
+                LocalDateTime.of(2026, 8, 6, 14, 0), null);
+        when(idempotencyMapper.selectByUserAndTokenHash(anyLong(), any())).thenReturn(null);
+        when(draftStore.claim(USER_ID, TOKEN)).thenReturn(AppointmentDraftClaim.claimed(foreignDraft));
+
+        assertThatThrownBy(() -> service.confirm(USER_ID, TOKEN))
+                .isInstanceOf(LeaseException.class)
+                .hasMessage("确认令牌无效或已过期");
+        verify(draftStore).release(USER_ID, TOKEN);
+        verify(roomInfoMapper, never()).selectReleasedByIdForUpdate(anyLong());
+    }
+
+    @Test
     void rejectsRoomThatBecameUnavailable() {
         when(idempotencyMapper.selectByUserAndTokenHash(anyLong(), any())).thenReturn(null);
         when(draftStore.claim(USER_ID, TOKEN)).thenReturn(AppointmentDraftClaim.claimed(draft()));
