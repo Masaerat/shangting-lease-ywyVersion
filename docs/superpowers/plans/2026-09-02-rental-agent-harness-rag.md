@@ -10,7 +10,7 @@
 
 ## 1. 目标
 
-在当前已有的 27 公寓业务、AI 对话、RAG、预约和 Outbox 基础上，补齐一个可解释的 Agent Harness，并把 RAG 检索链路、业务工具、H5 交互和预约确认统一为一条可复现闭环。
+在当前已有的 27 公寓业务、AI 对话、RAG、预约和 Outbox 基础上，先补齐后端可解释的 Agent Harness，并把 RAG 检索链路、业务工具、预约确认和 API/SSE 契约统一为一条可复现闭环。H5 只作为后续客户端，不纳入本阶段开发和验收。
 
 最终必须同时支持两条路径：
 
@@ -28,8 +28,8 @@
 - 开始前记录 `git status --short`，保留用户已有修改。
 - `.idea/misc.xml` 永远不加入暂存区。
 - 禁止 `git reset --hard`、`git checkout --`、删除式回滚和覆盖用户目录。
-- 前端只从 `E:\frontend\rentHouseH5` 按需复制到仓库，不修改原前端目录。
-- 本阶段优先选择 H5 完成闭环，不为 Admin 增加无关页面。
+- 本阶段不复制、修改或构建 `E:\frontend\rentHouseH5`，也不修改 Admin 前端。
+- 本阶段通过后端 API、SSE 测试客户端和自动化测试完成闭环；H5 作为后续客户端接入。
 
 ### 2.2 数据库保护
 
@@ -56,7 +56,7 @@
 - `RoomSearchTool` 已查询真实 MySQL 房源。
 - PGvector 和本地 Markdown 知识已经存在。
 - 预约草稿、确认、幂等和 Outbox 已有实现和测试雏形。
-- H5 已有 AI 入口和预约结果相关页面基础。
+- H5 已有 AI 入口和预约结果相关页面基础，但本阶段不修改前端。
 
 ### 3.2 本计划真正要补齐的内容
 
@@ -77,8 +77,8 @@
 | 3 | 混合检索、改写、rerank、引用 | 2 | 检索服务和质量测试 |
 | 4 | Agent Loop、工具注册和权限 | 1、3 | Agent Runtime 和轨迹测试 |
 | 5 | 业务闭环接入和预约安全边界 | 4 | 草稿、确认、幂等和 Outbox 测试 |
-| 6 | H5 展示与交互闭环 | 5 | H5 单测、构建和页面验收 |
-| 7 | 端到端、评测集、文档和简历素材 | 6 | 一键 Demo、验收报告 |
+| 6 | 后端 API/SSE 闭环集成验收 | 5 | API 闭环脚本、集成测试 |
+| 7 | RAG 评测、面试文档和简历素材 | 6 | 评测集、后端演示文档、验收报告 |
 | 8 | 最终审计和交付 | 7 | 分支、迁移、秘密和测试审计 |
 
 ---
@@ -335,80 +335,73 @@ git diff --check
 
 **手工验证：**
 
-- 从 H5 创建草稿后查询数据库，预约数量不增加。
-- 点击确认后“我的预约”出现一条新记录。
+- 通过 API 创建草稿后查询数据库，预约数量不增加。
+- 通过确认 API 后调用预约查询接口，能看到一条新记录。
 - RabbitMQ 不可用时预约仍存在，Outbox 状态不是丢失。
 
 - [ ] Task 5 完成
 - [ ] Task 5 独立提交：`feat: harden rental appointment flow`
 
-## Task 6：完成 H5 面试演示页面
+## Task 6：完成后端 API/SSE 闭环验收
 
-**目标：** 让用户不依赖 Swagger 也能从登录开始跑到我的预约。
-
-**预期文件：**
-
-- Create/Modify under `frontend/rent-house-h5/src/api/ai/**`
-- Create/Modify under `frontend/rent-house-h5/src/views/aiAssistant/**`
-- Create/Modify under `frontend/rent-house-h5/src/components/AiRoomCard/**`
-- Create/Modify under `frontend/rent-house-h5/src/components/AiCitationList/**`
-- Create/Modify under `frontend/rent-house-h5/src/components/AppointmentDraftSheet/**`
-- Modify: `frontend/rent-house-h5/src/router/**`
-- Modify: `frontend/rent-house-h5/src/views/message/message.vue` only if it is the existing entry point
-- Test: H5 Vitest and Playwright files
-
-**实施步骤：**
-
-1. 复用现有登录 token 和 Axios 配置。
-2. 用 `fetch` 读取 POST SSE，解析 meta/message/recommendations/citations/done/error。
-3. 展示 `MODEL`/`FALLBACK`、房源卡片、引用和建议动作。
-4. 用户选房后打开预约草稿表单。
-5. 草稿成功后展示明确的确认按钮；未点击不能调用 confirm API。
-6. 确认成功后跳转现有“我的预约”。
-7. 保留断网、超时、重复点击和空结果状态。
-
-**自动验证：**
-
-```powershell
-Set-Location frontend/rent-house-h5
-npm run type-check
-npm run test:unit
-npm run build
-```
-
-**手工验证：**
-
-- 390x844 移动端和 1440x900 桌面端不重叠、不溢出。
-- 混合问题可看到房源、引用和 fallback 标识。
-- 预约流程必须有一次明确的用户点击确认。
-
-- [ ] Task 6 完成
-- [ ] Task 6 独立提交：`feat: complete H5 rental agent demo`
-
-## Task 7：端到端验收、RAG 评测和面试文档
-
-**目标：** 将实现变成可重复演示、可证明、可面试表达的交付物。
+**目标：** 不依赖 H5 页面，通过后端接口和 SSE 测试客户端从登录开始跑到我的预约，证明后端自身已经形成完整闭环。
 
 **预期文件：**
 
 - Create/Modify: `scripts/smoke-rental-agent.ps1`
 - Create/Modify: `web/web-app/src/test/java/com/atguigu/lease/e2e/RentalAgentClosedLoopIT.java`
-- Create/Modify: `frontend/rent-house-h5/e2e/rental-agent-closed-loop.spec.ts`
+- Create/Modify: `web/web-app/src/test/java/com/atguigu/lease/web/app/controller/ai/AiApiContractTest.java`
+- Modify: `docs/ai-rental-agent/api.md`
+- Constraint: do not modify H5 source; verify the API contract remains consumable by the existing client
+
+**实施步骤：**
+
+1. 用测试客户端调用现有 Demo 登录接口获取 access-token。
+2. 读取 `POST /app/ai/chat` SSE，解析 meta/message/recommendations/citations/done/error。
+3. 断言 `MODEL`/`FALLBACK`、真实房源、RAG 引用和建议动作。
+4. 调用预约草稿接口，并查询数据库证明此时预约数量不变。
+5. 调用预约确认接口，断言只产生一条预约、幂等记录和 Outbox。
+6. 重放确认令牌，断言返回相同 appointmentId。
+7. 调用“我的预约”接口，断言能查到刚创建的预约。
+8. 增加断网、模型超时、重复请求、空结果和越权请求的 API 断言。
+
+**自动验证：**
+
+```powershell
+.\mvnw.cmd -pl web/web-app -Dtest=RentalAgentClosedLoopIT,AiApiContractTest test
+.\scripts\smoke-rental-agent.ps1
+```
+
+**手工验证：**
+
+- SSE 客户端可解析所有稳定事件，且不会依赖模型原始 JSON。
+- 混合问题可得到房源、引用和 fallback 标识。
+- API 流程必须把草稿和确认分成两个请求，未确认前不落库。
+
+- [ ] Task 6 完成
+- [ ] Task 6 独立提交：`test: verify backend rental agent loop`
+
+## Task 7：RAG 评测、面试文档和简历素材
+
+**目标：** 将实现变成可重复演示、可证明、可面试表达的交付物。
+
+**预期文件：**
+
 - Create/Modify: `docs/ai-rental-agent/agent-harness-explained.md`
 - Create/Modify: `docs/ai-rental-agent/rag-evaluation.md`
 - Modify: `docs/ai-rental-agent/api.md`
 - Modify: `docs/ai-rental-agent/test-report.md`
 - Modify: `readme.md`
 
-**闭环脚本必须验证：**
+**后端闭环脚本必须验证：**
 
-1. Demo 登录。
+1. Demo 登录接口。
 2. fallback 混合问题。
 3. 房源和引用非空。
 4. 草稿后预约数量不变。
 5. 确认后预约数量增加 1。
 6. 重放令牌返回相同 ID。
-7. 我的预约能查询到该记录。
+7. 我的预约 API 能查询到该记录。
 8. Outbox 有且只有一条对应事件。
 
 **RAG 评测：**
@@ -421,17 +414,13 @@ npm run build
 ```powershell
 git branch --show-current
 .\mvnw.cmd -pl web/web-app -Dtest=RentalAgentClosedLoopIT test
-Set-Location frontend/rent-house-h5
-npm run type-check
-npm run test:unit
-npm run build
-npx playwright test --list
+.\scripts\smoke-rental-agent.ps1
 ```
 
-Docker、Testcontainers 和真实 Luna smoke test 只有在用户允许启动对应依赖、并且本轮确实执行成功后，才能标记通过。
+Docker、Testcontainers 和真实 Luna smoke test 只有在用户允许启动对应依赖、并且本轮确实执行成功后，才能标记通过。H5 构建和 Playwright 不属于本阶段验证。
 
 - [ ] Task 7 完成
-- [ ] Task 7 独立提交：`test: verify rental agent closed loop`
+- [ ] Task 7 独立提交：`docs: document backend rental agent demo`
 
 ## Task 8：最终审计和交付门禁
 
@@ -472,7 +461,7 @@ rg -n "api-key:\s*[^$<]|AI_(CHAT|EMBED)_API_KEY=.+|access-key-secret:\s*[^$<]" .
 1. 规格中的两条路径都能运行，至少 fallback 路径不依赖外部模型。
 2. Agent Loop、工具权限、RAG 引用和预约确认边界都有代码和测试。
 3. 当前本地数据库没有被破坏，迁移是增量且可追踪的。
-4. H5 能展示完整用户流程，API 脚本能重复验证关键结果。
+4. API/SSE 脚本能重复验证完整后端流程；H5 可在后续直接消费稳定契约。
 5. 面试解释文档能让开发者不打开代码也能讲清楚完整链路。
 6. 所有未执行的 Docker、真实模型和浏览器验证都明确标注为待执行，不虚报通过。
 
@@ -482,7 +471,7 @@ rg -n "api-key:\s*[^$<]|AI_(CHAT|EMBED)_API_KEY=.+|access-key-secret:\s*[^$<]" .
 
 - 不进入 Task 0 之后的代码实现。
 - 不新建或修改数据库迁移。
-- 不复制或修改前端源码。
+- 不复制或修改前端源码；H5 集成延期到后续阶段。
 - 不启动 Docker。
 
 用户批准后按 Task 0 -> Task 8 顺序执行；每完成一个 Task 停在独立验收点，报告变更、测试输出、数据库影响和剩余风险，再进入下一个 Task。
