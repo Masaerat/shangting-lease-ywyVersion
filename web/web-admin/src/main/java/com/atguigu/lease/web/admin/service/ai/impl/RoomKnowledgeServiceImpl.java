@@ -63,8 +63,13 @@ public class RoomKnowledgeServiceImpl implements RoomKnowledgeService {
         meta.put("namespace", NS_ROOMS);
         meta.put("docType", "room");
         meta.put("roomRef", room.getId());
+        meta.put("roomNumber", room.getRoomNumber() == null ? "" : room.getRoomNumber());
+        meta.put("rent", room.getRent() == null ? "" : room.getRent());
+        meta.put("apartmentId", room.getApartmentId() == null ? 0L : room.getApartmentId());
+        meta.put("city", apartment == null || apartment.getCityName() == null ? "" : apartment.getCityName());
+        meta.put("district", apartment == null || apartment.getDistrictName() == null ? "" : apartment.getDistrictName());
         meta.put("source", apartment == null ? "" : apartment.getName());
-        return new Document(sb.toString(), meta);
+        return new Document("room-" + room.getId(), sb.toString(), meta);
     }
 
     @Override

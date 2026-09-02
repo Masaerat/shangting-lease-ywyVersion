@@ -211,8 +211,8 @@ git diff --check
 
 **停止条件：** 本地现有知识表字段与 Mapper 不一致时，先回到 Task 0 更新基线，不直接写迁移。
 
-- [ ] Task 2 完成
-- [ ] Task 2 独立提交：`feat: add traceable rental knowledge chunks`
+- [x] Task 2 完成（2026-09-02：结构化标题切片、稳定 chunkId、分类/章节/checksum metadata 和房源 metadata，4 个测试通过；无需 MySQL 迁移）
+- [x] Task 2 独立提交：`feat: add traceable rental knowledge chunks`
 
 ## Task 3：实现混合检索和引用
 

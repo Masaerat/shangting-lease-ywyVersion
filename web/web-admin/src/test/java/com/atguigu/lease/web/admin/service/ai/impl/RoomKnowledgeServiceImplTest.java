@@ -32,6 +32,9 @@ class RoomKnowledgeServiceImplTest {
         assertTrue(text.contains("阳光公寓"), "应包含公寓名");
         assertEquals("rooms", doc.getMetadata().get("namespace"));
         assertEquals(100L, doc.getMetadata().get("roomRef"));
+        assertEquals("A-101", doc.getMetadata().get("roomNumber"));
+        assertEquals(new java.math.BigDecimal("3500"), doc.getMetadata().get("rent"));
+        assertEquals("room-100", doc.getId());
     }
 
     @Test

@@ -12,6 +12,7 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.reader.tika.TikaDocumentReader;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -19,10 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Service
 public class DocumentKnowledgeServiceImpl implements DocumentKnowledgeService {
@@ -36,6 +34,7 @@ public class DocumentKnowledgeServiceImpl implements DocumentKnowledgeService {
     private final MinioClient minioClient;
     private final MinioProperties minioProperties;
     private final RagProperties ragProperties;
+    private final StructuredKnowledgeChunker chunker;
 
     public DocumentKnowledgeServiceImpl(VectorStore vectorStore, AiKnowledgeDocMapper docMapper,
                                         MinioClient minioClient, MinioProperties minioProperties,
@@ -45,16 +44,12 @@ public class DocumentKnowledgeServiceImpl implements DocumentKnowledgeService {
         this.minioClient = minioClient;
         this.minioProperties = minioProperties;
         this.ragProperties = ragProperties;
+        this.chunker = new StructuredKnowledgeChunker(ragProperties);
     }
 
     /** 暴露给单测:按 RagProperties 构造分片器。 */
     public TokenTextSplitter buildSplitter() {
-        return new TokenTextSplitter(
-                ragProperties.getChunkSize(),
-                ragProperties.getMinChunkSizeChars(),
-                ragProperties.getMinChunkLengthToEmbed(),
-                ragProperties.getMaxNumChunks(),
-                true);
+        return chunker.splitter();
     }
 
     @Override
@@ -94,20 +89,8 @@ public class DocumentKnowledgeServiceImpl implements DocumentKnowledgeService {
                     .bucket(doc.getMinioBucket()).object(doc.getMinioObjectKey()).build())) {
                 byte[] bytes = in.readAllBytes();
                 List<Document> raw = new TikaDocumentReader(new ByteArrayResource(bytes)).get();
-                Map<String, Object> shared = Map.of(
-                        "namespace", doc.getNamespace(),
-                        "docType", "doc",
-                        "docId", docId,
-                        "source", doc.getDocName());
-                List<Document> enriched = raw.stream()
-                        .map(d -> new Document(d.getText(),
-                                Stream.concat(
-                                                d.getMetadata().entrySet().stream(),
-                                                shared.entrySet().stream())
-                                        .collect(Collectors.toMap(
-                                                Map.Entry::getKey, Map.Entry::getValue, (a, b) -> b))))
-                        .toList();
-                List<Document> chunks = buildSplitter().split(enriched);
+                List<Document> chunks = chunker.split(doc, raw);
+                vectorStore.delete(new FilterExpressionBuilder().eq("docId", docId).build());
                 vectorStore.add(chunks);
                 doc.setChunkCount(chunks.size());
                 doc.setStatus(STATUS_INDEXED);
