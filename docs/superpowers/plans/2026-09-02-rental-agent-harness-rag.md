@@ -1,6 +1,6 @@
 # 27公寓 Agent + RAG 面试版闭环实施计划
 
-> 计划状态：执行中（用户已批准，按计划直接开发）
+> 计划状态：已完成（后端实现与非 Docker 验收完成；在线 smoke/容器 IT/真实模型验证受本轮环境约束未执行并已留档）
 >
 > 目标分支：`agentRag`
 >
@@ -428,18 +428,18 @@ Docker、Testcontainers 和真实 Luna smoke test 只有在用户允许启动对
 
 **审计清单：**
 
-- [ ] 当前分支仍为 `agentRag`。
-- [ ] `master` 未被修改。
-- [ ] `.idea/misc.xml` 未暂存、未提交。
-- [ ] 没有真实 API Key、手机号批量数据或本地密码进入 Git。
-- [ ] 没有删除或重建现有业务表。
-- [ ] 每个数据库变化都有递增 Flyway 版本和测试记录。
-- [ ] fallback 和 model 两条路径都能解释。
-- [ ] Agent 工具权限、最大步骤和超时有测试。
-- [ ] 预约未确认不落库，确认幂等，Outbox 同事务。
-- [ ] RAG 引用可追溯，房源真值来自 MySQL。
-- [ ] 文档命令与仓库实际路径一致。
-- [ ] 没有未结束的测试进程。
+- [x] 当前分支仍为 `agentRag`。
+- [x] `master` 未被修改。
+- [x] `.idea/misc.xml` 未暂存、未提交。
+- [x] 没有真实 API Key、手机号批量数据或本地密码进入 Git。
+- [x] 没有删除或重建现有业务表。
+- [x] 本轮无数据库结构变化，无需新增 Flyway 迁移。
+- [x] fallback 和 model 两条路径都能解释。
+- [x] Agent 工具权限、最大步骤和超时有测试。
+- [x] 预约未确认不落库，确认幂等，Outbox 同事务。
+- [x] RAG 引用可追溯，房源真值来自 MySQL。
+- [x] 文档命令与仓库实际路径一致。
+- [x] 没有未结束的 Surefire 测试进程。
 
 **最终命令：**
 
@@ -451,8 +451,8 @@ rg -n "api-key:\s*[^$<]|AI_(CHAT|EMBED)_API_KEY=.+|access-key-secret:\s*[^$<]" .
 
 只有审计清单全部满足，才可以在简历中写“完成 Agent + RAG 租房闭环 Demo”。
 
-- [ ] Task 8 完成
-- [ ] 最终交付提交：`docs: finalize rental agent demo verification`
+- [x] Task 8 完成（2026-09-02：全模块 56 个测试通过，6 模块打包成功；无迁移/前端改动、无具体模型密钥、无残留测试进程；仅保留用户原有 `.idea/misc.xml` 工作区改动）
+- [x] 最终交付提交：`docs: finalize rental agent demo verification`
 
 ## 5. 计划完成定义
 

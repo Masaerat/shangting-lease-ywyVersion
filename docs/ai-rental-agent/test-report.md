@@ -21,6 +21,8 @@
 | API/JWT/SSE 与预约组合回归 | 22 tests passed |
 | RAG 检索回归 | 4 tests passed，其中 10 条离线数据集 HitRate@1=1.00、MRR=1.00 |
 | PowerShell smoke 客户端 | `smoke-rental-agent.ps1` 与兼容脚本 AST 语法检查通过 |
+| Maven 全模块回归 | web-admin 5 + web-app 51，共 56 tests passed，0 failures/errors/skipped |
+| Maven 全模块打包 | `mvnw.cmd -DskipTests package`，Reactor 6 个模块全部 SUCCESS |
 
 以上测试组存在重叠，不能相加后当作“总测试数”。最终全量测试数以 Task 8 的 Maven 输出为准。
 
@@ -72,3 +74,5 @@
 ## 6. 当前结论
 
 Agent + RAG + 预约安全写入的后端代码闭环已经形成，并有非 Docker 自动化证据。完整进程级闭环脚本和容器 IT 已实现但本轮未运行，因此项目可以描述为“完成可运行的后端闭环 Demo 实现”，不能描述为“完成生产部署或完整容器验收”。
+
+补充：全量测试中的原有 `ScheduledTasksTest` 连接了本地 MySQL，租约状态更新语句返回 `Updates: 0`，未改变本地数据行。
