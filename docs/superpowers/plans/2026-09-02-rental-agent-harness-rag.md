@@ -250,8 +250,8 @@ git diff --check
 - 删除/停用向量配置后仍能看到本地知识引用。
 - 房源价格不从 citation 中读取。
 
-- [ ] Task 3 完成
-- [ ] Task 3 独立提交：`feat: add hybrid rental knowledge retrieval`
+- [x] Task 3 完成（2026-09-02：查询改写、向量/关键词合并、去重、可解释 rerank、统一引用和本地降级，3 个测试通过）
+- [x] Task 3 独立提交：`feat: add hybrid rental knowledge retrieval`
 
 ## Task 4：实现 Agent Loop、工具注册、权限和轨迹
 

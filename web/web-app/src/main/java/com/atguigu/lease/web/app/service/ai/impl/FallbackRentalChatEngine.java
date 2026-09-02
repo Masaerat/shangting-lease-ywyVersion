@@ -1,6 +1,9 @@
 package com.atguigu.lease.web.app.service.ai.impl;
 
 import com.atguigu.lease.web.app.service.ai.RentalChatEngine;
+import com.atguigu.lease.web.app.service.ai.rag.KnowledgeCitation;
+import com.atguigu.lease.web.app.service.ai.rag.KnowledgeSearchResult;
+import com.atguigu.lease.web.app.service.ai.rag.RentalKnowledgeService;
 import com.atguigu.lease.web.app.tools.RoomSearchTool;
 import com.atguigu.lease.web.app.vo.ai.AiChatMetaVo;
 import com.atguigu.lease.web.app.vo.ai.AiRecommendationVo;
@@ -23,9 +26,9 @@ public class FallbackRentalChatEngine implements RentalChatEngine {
     private static final Pattern DISTRICT = Pattern.compile("([\\p{IsHan}]{2,6}(?:区|县))");
 
     private final RoomSearchTool roomSearchTool;
-    private final LocalRentalKnowledgeService knowledgeService;
+    private final RentalKnowledgeService knowledgeService;
 
-    public FallbackRentalChatEngine(RoomSearchTool roomSearchTool, LocalRentalKnowledgeService knowledgeService) {
+    public FallbackRentalChatEngine(RoomSearchTool roomSearchTool, RentalKnowledgeService knowledgeService) {
         this.roomSearchTool = roomSearchTool;
         this.knowledgeService = knowledgeService;
     }
@@ -42,7 +45,7 @@ public class FallbackRentalChatEngine implements RentalChatEngine {
         String district = group(DISTRICT, execution.message());
         List<RoomSearchTool.RoomHit> rooms = roomSearchTool.searchRooms(
                 city, district, range.minRent(), range.maxRent());
-        List<LocalRentalKnowledgeService.KnowledgeSection> knowledge = knowledgeService.search(execution.message());
+        KnowledgeSearchResult knowledge = knowledgeService.search(execution.message(), null, 5);
         List<AiRecommendationVo> recommendations = rooms.stream()
                 .map(room -> new AiRecommendationVo(
                         room.roomId(), room.apartmentId(), room.apartment(), room.roomNumber(), room.rent()))
@@ -51,19 +54,23 @@ public class FallbackRentalChatEngine implements RentalChatEngine {
         sink.accept(new ChatSseEvent("meta", new AiChatMetaVo(mode(), execution.conversationId())));
         sink.accept(new ChatSseEvent("message", answer(rooms, knowledge)));
         sink.accept(new ChatSseEvent("recommendations", recommendations));
-        sink.accept(new ChatSseEvent("citations", knowledge));
+        sink.accept(new ChatSseEvent("citations", knowledge.citations()));
         sink.accept(new ChatSseEvent("done", null));
     }
 
     private String answer(List<RoomSearchTool.RoomHit> rooms,
-                          List<LocalRentalKnowledgeService.KnowledgeSection> knowledge) {
+                          KnowledgeSearchResult knowledge) {
         String roomSummary = rooms.isEmpty()
                 ? "暂未找到完全符合条件的在租房源，可以适当放宽预算或区域。"
                 : "找到 " + rooms.size() + " 套符合条件的在租房源，已整理在推荐列表中。";
-        String knowledgeSummary = knowledge.isEmpty()
+        String knowledgeSummary = knowledge.citations().isEmpty()
                 ? ""
-                : " 关于" + knowledge.getFirst().title() + "：" + knowledge.getFirst().excerpt();
+                : summary(knowledge.citations().getFirst());
         return roomSummary + knowledgeSummary;
+    }
+
+    private String summary(KnowledgeCitation citation) {
+        return " 关于" + citation.chapter() + "：" + citation.excerpt();
     }
 
     private RentRange rentRange(String message) {

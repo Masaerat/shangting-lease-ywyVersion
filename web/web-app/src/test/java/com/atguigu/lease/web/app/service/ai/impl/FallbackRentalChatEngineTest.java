@@ -1,6 +1,9 @@
 package com.atguigu.lease.web.app.service.ai.impl;
 
 import com.atguigu.lease.web.app.service.ai.RentalChatEngine.ChatExecution;
+import com.atguigu.lease.web.app.service.ai.rag.KnowledgeCitation;
+import com.atguigu.lease.web.app.service.ai.rag.KnowledgeSearchResult;
+import com.atguigu.lease.web.app.service.ai.rag.RentalKnowledgeService;
 import com.atguigu.lease.web.app.tools.RoomSearchTool;
 import com.atguigu.lease.web.app.vo.ai.ChatSseEvent;
 import org.junit.jupiter.api.Test;
@@ -21,13 +24,17 @@ class FallbackRentalChatEngineTest {
     @Test
     void returnsRoomsAndKnowledgeWithoutCreatingAppointments() {
         RoomSearchTool roomSearch = mock(RoomSearchTool.class);
-        LocalRentalKnowledgeService knowledge = mock(LocalRentalKnowledgeService.class);
+        RentalKnowledgeService knowledge = mock(RentalKnowledgeService.class);
         when(roomSearch.searchRooms(any(), any(), any(), eq(new BigDecimal("2500"))))
                 .thenReturn(List.of(new RoomSearchTool.RoomHit(
                         930001L, "27公寓张江店", "A101", new BigDecimal("2300"), 920001L)));
-        when(knowledge.search("预算2500并说明押金"))
-                .thenReturn(List.of(new LocalRentalKnowledgeService.KnowledgeSection(
-                        "押金与付款", "签约时按合同约定支付押金。", "rag-knowledge.md")));
+        when(knowledge.search("预算2500并说明押金", null, 5))
+                .thenReturn(new KnowledgeSearchResult(
+                        "预算2500并说明押金", "预算2500并说明押金 押金", "LOCAL",
+                        List.of(new KnowledgeCitation(
+                                "local-1", null, "rag-knowledge.md", "DEPOSIT", "押金与付款",
+                                "押金与付款", "rag-knowledge.md", 1,
+                                "签约时按合同约定支付押金。", 0.8))));
         var engine = new FallbackRentalChatEngine(roomSearch, knowledge);
         List<ChatSseEvent> events = new ArrayList<>();
 
