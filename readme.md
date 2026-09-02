@@ -8,6 +8,8 @@
 
 ## AI 租房助手闭环
 
+面试版核心文档：`docs/ai-rental-agent/agent-harness-explained.md`、`docs/ai-rental-agent/rag-evaluation.md`、`docs/ai-rental-agent/resume.md`。
+
 `agentRag` 分支在原有业务上增加了可降级的 AI 找房闭环：认证 SSE 对话、MySQL 真实房源推荐、租房知识引用、Redis 多轮历史、预约草稿与显式二次确认、幂等写入，以及 Transactional Outbox 可靠事件投递。没有模型 Key 时使用本地规则和版本化知识完成演示。
 
 ```powershell

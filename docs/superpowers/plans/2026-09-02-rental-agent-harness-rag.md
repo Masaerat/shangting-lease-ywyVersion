@@ -419,8 +419,8 @@ git branch --show-current
 
 Docker、Testcontainers 和真实 Luna smoke test 只有在用户允许启动对应依赖、并且本轮确实执行成功后，才能标记通过。H5 构建和 Playwright 不属于本阶段验证。
 
-- [ ] Task 7 完成
-- [ ] Task 7 独立提交：`docs: document backend rental agent demo`
+- [x] Task 7 完成（2026-09-02：新增 Agent Harness 通俗全链路文档、RAG 评测报告和简历素材；补齐 10 条五分类离线回归集，LOCAL HitRate@1=1.00、MRR=1.00，4 个 RAG 相关测试通过；PGvector 在线指标与真实模型 Faithfulness 明确标为未测）
+- [x] Task 7 独立提交：`docs: document backend rental agent demo`
 
 ## Task 8：最终审计和交付门禁
 

@@ -27,17 +27,27 @@ public class LocalRentalKnowledgeService {
     }
 
     private boolean matches(String query, String title) {
-        if (title.contains("押金") || title.contains("付款")) {
-            return query.contains("押金") || query.contains("付款") || query.contains("月付") || query.contains("季付");
+        if (title.contains("押金")) {
+            return containsAny(query, "押金", "保证金", "退押");
+        }
+        if (title.contains("付款")) {
+            return containsAny(query, "付款", "月付", "季付", "租金");
         }
         if (title.contains("预约")) {
-            return query.contains("预约") || query.contains("看房");
+            return containsAny(query, "预约", "看房", "到访");
         }
         if (title.contains("报修")) {
-            return query.contains("报修") || query.contains("维修");
+            return containsAny(query, "报修", "维修", "故障");
         }
         if (title.contains("退租")) {
-            return query.contains("退租") || query.contains("结算") || query.contains("违约");
+            return containsAny(query, "退租", "结算", "违约", "钥匙");
+        }
+        return false;
+    }
+
+    private boolean containsAny(String value, String... terms) {
+        for (String term : terms) {
+            if (value.contains(term)) return true;
         }
         return false;
     }
