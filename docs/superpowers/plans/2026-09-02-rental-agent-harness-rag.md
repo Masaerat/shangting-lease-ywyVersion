@@ -378,8 +378,8 @@ git diff --check
 - 混合问题可得到房源、引用和 fallback 标识。
 - API 流程必须把草稿和确认分成两个请求，未确认前不落库。
 
-- [ ] Task 6 完成
-- [ ] Task 6 独立提交：`test: verify backend rental agent loop`
+- [x] Task 6 完成（2026-09-02：统一 MODEL/FALLBACK SSE 完成事件，新增 JWT + POST SSE + 草稿/确认 MockMvc 契约测试，更新闭环 IT、API 文档和 smoke 客户端；22 个非 Docker 测试及 PowerShell 语法检查通过；因 Redis 未启动，在线 smoke 与 Testcontainers 闭环本轮未执行）
+- [x] Task 6 独立提交：`test: verify backend rental agent loop`
 
 ## Task 7：RAG 评测、面试文档和简历素材
 

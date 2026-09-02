@@ -14,7 +14,7 @@
 Copy-Item .env.example .env
 docker compose up --build
 .\scripts\verify-compose.ps1
-.\scripts\smoke-ai-agent.ps1
+.\scripts\smoke-rental-agent.ps1
 ```
 
 服务地址：Admin `http://localhost:8080`，App API `http://localhost:8081`，H5 `http://localhost:8082`。演示登录为 `13800000000 / 888888`，固定验证码仅在 Docker demo 配置中启用。

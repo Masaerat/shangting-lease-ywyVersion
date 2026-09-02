@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -45,6 +46,11 @@ class FallbackRentalChatEngineTest {
                 .containsExactly("meta", "message", "recommendations", "citations", "done");
         assertThat((List<?>) event(events, "recommendations").getPayload()).isNotEmpty();
         assertThat((List<?>) event(events, "citations").getPayload()).isNotEmpty();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> done = (Map<String, Object>) event(events, "done").getPayload();
+        assertThat(done.get("traceId")).isEqualTo(
+                ((com.atguigu.lease.web.app.vo.ai.AiChatMetaVo) event(events, "meta").getPayload()).getTraceId());
+        assertThat(done.get("suggestedAction")).isEqualTo("SELECT_ROOM");
     }
 
     private ChatSseEvent event(List<ChatSseEvent> events, String type) {

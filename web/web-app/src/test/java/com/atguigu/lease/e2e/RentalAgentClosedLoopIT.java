@@ -75,7 +75,12 @@ class RentalAgentClosedLoopIT {
         JsonNode meta = event(chatEvents, "meta").path("payload");
         JsonNode recommendations = event(chatEvents, "recommendations").path("payload");
         JsonNode citations = event(chatEvents, "citations").path("payload");
+        JsonNode done = event(chatEvents, "done").path("payload");
         assertThat(meta.path("mode").asText()).isEqualTo("FALLBACK");
+        assertThat(meta.path("provider").asText()).isEqualTo("local-rules");
+        assertThat(meta.path("traceId").asText()).isNotBlank();
+        assertThat(done.path("traceId").asText()).isEqualTo(meta.path("traceId").asText());
+        assertThat(done.path("suggestedAction").asText()).isEqualTo("SELECT_ROOM");
         assertThat(recommendations.isArray()).isTrue();
         assertThat(recommendations).isNotEmpty();
         assertThat(citations.isArray()).isTrue();

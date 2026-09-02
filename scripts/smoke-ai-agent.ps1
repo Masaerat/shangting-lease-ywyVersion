@@ -54,8 +54,23 @@ $events = @($chatResponse.Content -split "`r?`n" |
 $meta = $events | Where-Object { $_.type -eq 'meta' } | Select-Object -First 1
 $recommendations = $events | Where-Object { $_.type -eq 'recommendations' } | Select-Object -First 1
 $citations = $events | Where-Object { $_.type -eq 'citations' } | Select-Object -First 1
-if ($meta.payload.mode -ne 'FALLBACK') {
-    throw "Expected FALLBACK mode without AI keys, got $($meta.payload.mode)."
+$done = $events | Where-Object { $_.type -eq 'done' } | Select-Object -First 1
+foreach ($requiredType in @('meta', 'message', 'recommendations', 'citations', 'done')) {
+    if (-not ($events | Where-Object { $_.type -eq $requiredType } | Select-Object -First 1)) {
+        throw "Chat SSE is missing required event: $requiredType"
+    }
+}
+if ($meta.payload.mode -notin @('MODEL', 'FALLBACK')) {
+    throw "Unexpected chat mode: $($meta.payload.mode)."
+}
+if (-not $meta.payload.provider -or -not $meta.payload.traceId) {
+    throw 'Chat meta did not include provider and traceId.'
+}
+if ($done.payload.traceId -ne $meta.payload.traceId) {
+    throw 'The done event traceId does not match the meta event.'
+}
+if ($done.payload.suggestedAction -ne 'SELECT_ROOM') {
+    throw "Expected SELECT_ROOM action, got $($done.payload.suggestedAction)."
 }
 if (@($recommendations.payload).Count -eq 0 -or @($citations.payload).Count -eq 0) {
     throw 'Chat did not return both room recommendations and citations.'
@@ -93,6 +108,8 @@ if ($appointments.id -notcontains $first.appointmentId) {
 
 [pscustomobject]@{
     mode = $meta.payload.mode
+    provider = $meta.payload.provider
+    traceId = $meta.payload.traceId
     roomId = $roomId
     appointmentId = $first.appointmentId
     idempotentReplay = $replay.idempotentReplay

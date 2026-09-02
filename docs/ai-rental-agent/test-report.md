@@ -24,7 +24,7 @@
 - `AppointmentConfirmationServiceIT`：并发确认只生成一条预约和一条 Outbox。
 - `AppointmentOutboxPublisherIT`：RabbitMQ 暂停后保持 `PENDING`，恢复后变为 `PUBLISHED`。
 - `RentalAgentClosedLoopIT`：登录、fallback SSE、草稿、确认、幂等重放和预约列表完整 API 链路。
-- `scripts/verify-compose.ps1` 和 `scripts/smoke-ai-agent.ps1`。
+- `scripts/verify-compose.ps1` 和 `scripts/smoke-rental-agent.ps1`（旧的 `smoke-ai-agent.ps1` 仍保留兼容）。
 - Playwright mobile `390x844` 与 desktop `1440x900` 的真实页面、截图和无重叠检查。
 - 配置有效 GLM Key 后的 `mode=MODEL`、`RoomSearchTool` 与引用 smoke。
 

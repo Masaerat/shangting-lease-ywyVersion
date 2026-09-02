@@ -36,14 +36,15 @@ access-token: <登录返回的 JWT>
 
 | `type` | `payload` |
 | --- | --- |
-| `meta` | `{ mode: "MODEL" | "FALLBACK", conversationId }` |
+| `meta` | `{ mode: "MODEL" | "FALLBACK", conversationId, provider, traceId }` |
 | `message` | 增量回答文本 |
 | `recommendations` | `{ roomId, apartmentId, apartment, roomNumber, rent }[]` |
-| `citations` | `{ roomId, apartment, roomNumber, rent, source }[]` |
-| `done` | `null` |
+| `citations` | `{ chunkId, documentName, category, chapter, section, source, version, excerpt, score }[]` |
+| `trajectory` | MODEL 模式可选的脱敏执行轨迹 `{ step, model, tool, status, elapsedMs, resultCount, errorType }[]` |
+| `done` | `{ traceId, suggestedAction: "SELECT_ROOM" | "CONFIRM_APPOINTMENT" | "NONE" }` |
 | `error` | 可展示的错误信息 |
 
-聊天接口是只读边界，不会创建预约。H5 使用 `fetch` 发送带认证头的 POST，并解析响应流。
+MODEL 与 FALLBACK 使用同一套事件外壳，客户端不解析模型原始 tool call。Agent 最多调用草稿工具，正式预约只能由下方确认接口写入；普通找房聊天不会创建预约。
 
 ## 预约草稿
 

@@ -12,10 +12,11 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.UUID;
 
 @Service("fallbackRentalChatEngine")
 public class FallbackRentalChatEngine implements RentalChatEngine {
@@ -51,13 +52,16 @@ public class FallbackRentalChatEngine implements RentalChatEngine {
                 .map(room -> new AiRecommendationVo(
                         room.roomId(), room.apartmentId(), room.apartment(), room.roomNumber(), room.rent()))
                 .toList();
+        String traceId = UUID.randomUUID().toString();
 
         sink.accept(new ChatSseEvent("meta", new AiChatMetaVo(
-                mode(), execution.conversationId(), "local-rules", UUID.randomUUID().toString())));
+                mode(), execution.conversationId(), "local-rules", traceId)));
         sink.accept(new ChatSseEvent("message", answer(rooms, knowledge)));
         sink.accept(new ChatSseEvent("recommendations", recommendations));
         sink.accept(new ChatSseEvent("citations", knowledge.citations()));
-        sink.accept(new ChatSseEvent("done", null));
+        sink.accept(new ChatSseEvent("done", Map.of(
+                "traceId", traceId,
+                "suggestedAction", rooms.isEmpty() ? "NONE" : "SELECT_ROOM")));
     }
 
     private String answer(List<RoomSearchTool.RoomHit> rooms,
