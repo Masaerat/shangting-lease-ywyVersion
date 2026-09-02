@@ -482,4 +482,3 @@ ai:appointment:claim:{userId}:{tokenHash}
 - 架构方案：待批准
 - 实施计划：见 `docs/superpowers/plans/2026-09-02-rental-agent-harness-rag.md`
 - 代码实施：在用户批准 spec 和 plan 前禁止开始
-

@@ -486,4 +486,3 @@ rg -n "api-key:\s*[^$<]|AI_(CHAT|EMBED)_API_KEY=.+|access-key-secret:\s*[^$<]" .
 - 不启动 Docker。
 
 用户批准后按 Task 0 -> Task 8 顺序执行；每完成一个 Task 停在独立验收点，报告变更、测试输出、数据库影响和剩余风险，再进入下一个 Task。
-
