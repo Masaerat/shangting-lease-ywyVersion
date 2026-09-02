@@ -119,8 +119,8 @@ git diff --check
 
 **停止条件：** 无法连接本地数据库或无法确认表结构时，暂停所有迁移和 Mapper 开发，只完成代码静态盘点。
 
-- [ ] Task 0 完成
-- [ ] Task 0 独立提交：`docs: record agentRag baseline`
+- [x] Task 0 完成（2026-09-02：只读核对 MySQL V1-V4、PGvector 13 条向量和 25 个基线测试）
+- [x] Task 0 独立提交：`docs: record agentRag baseline`
 
 ## Task 1：定义 Agent、RAG 和模型适配契约
 
