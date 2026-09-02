@@ -96,6 +96,14 @@ app:
     phone: ${DEMO_LOGIN_PHONE:13800000000}
     code: ${DEMO_LOGIN_CODE:888888}
   ai:
+    agent:
+      primary-model: ${AI_AGENT_PRIMARY_MODEL:${AI_CHAT_MODEL:glm-4-flash}}
+      fallback-model: ${AI_AGENT_FALLBACK_MODEL:}
+      max-steps: ${AI_AGENT_MAX_STEPS:6}
+      max-same-tool-calls: ${AI_AGENT_MAX_SAME_TOOL_CALLS:3}
+      timeout-ms: ${AI_AGENT_TIMEOUT_MS:15000}
+      tool-timeout-ms: ${AI_AGENT_TOOL_TIMEOUT_MS:3000}
+      trajectory-enabled: ${AI_AGENT_TRAJECTORY_ENABLED:true}
     rag:
       chunk-size: 800
       min-chunk-size-chars: 350

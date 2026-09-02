@@ -165,8 +165,8 @@ git diff --check
 
 **风险和停止条件：** 如果 Spring AI 1.0.0 的当前 ChatClient API 无法表达所需工具循环，保留现有 ChatClient 封装，在 Runtime 外包一层适配器，不能强行升级 Spring Boot/Spring AI 大版本。
 
-- [ ] Task 1 完成
-- [ ] Task 1 独立提交：`feat: define rental agent contracts`
+- [x] Task 1 完成（2026-09-02：Agent 上下文、结果、轨迹、权限、运行时接口和配置契约，2 个契约测试通过）
+- [x] Task 1 独立提交：`feat: define rental agent contracts`
 
 ## Task 2：补齐 RAG 文档元数据和结构化切片
 
