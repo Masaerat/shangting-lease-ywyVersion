@@ -1,6 +1,6 @@
 # 27公寓 Agent + RAG 面试版闭环实施计划
 
-> 计划状态：待用户批准
+> 计划状态：执行中（用户已批准，按计划直接开发）
 >
 > 目标分支：`agentRag`
 >
@@ -294,8 +294,8 @@ git diff --check
 - 轨迹不出现完整手机号、Key 或完整 prompt。
 - Agent 不能直接产生预约确认结果。
 
-- [ ] Task 4 完成
-- [ ] Task 4 独立提交：`feat: add rental agent harness`
+- [x] Task 4 完成（2026-09-02：显式 Tool Calling 循环、5 个领域工具、白名单与权限、超时/步数/重复调用限制、结构化观察及 SSE 轨迹；15 个 Task 4 测试通过）
+- [x] Task 4 独立提交：`feat: add rental agent harness`
 
 ## Task 5：接入现有预约和 Outbox 闭环
 

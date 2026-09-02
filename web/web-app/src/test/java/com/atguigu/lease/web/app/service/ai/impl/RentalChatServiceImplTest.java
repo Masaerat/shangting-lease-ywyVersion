@@ -1,44 +1,65 @@
 package com.atguigu.lease.web.app.service.ai.impl;
 
 import com.atguigu.lease.common.utils.CacheUtil;
+import com.atguigu.lease.config.ai.AiAgentProperties;
 import com.atguigu.lease.config.ai.RagProperties;
 import com.atguigu.lease.web.app.service.ai.RentalChatEngine;
+import com.atguigu.lease.web.app.service.ai.agent.AgentObservation;
+import com.atguigu.lease.web.app.service.ai.agent.AgentResult;
+import com.atguigu.lease.web.app.service.ai.agent.AgentStep;
+import com.atguigu.lease.web.app.service.ai.agent.RentalAgentRuntime;
+import com.atguigu.lease.web.app.service.ai.rag.KnowledgeCitation;
+import com.atguigu.lease.web.app.service.ai.rag.KnowledgeSearchResult;
+import com.atguigu.lease.web.app.tools.RoomSearchTool;
 import com.atguigu.lease.web.app.vo.ai.AiChatMetaVo;
 import com.atguigu.lease.web.app.vo.ai.ChatRequestVo;
 import com.atguigu.lease.web.app.vo.ai.ChatSseEvent;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.document.Document;
 import org.springframework.beans.factory.ObjectProvider;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class RentalChatServiceImplTest {
 
     @Test
-    void modelEngineKeepsNumberedContextAndRoomCitations() {
+    void modelEngineEmitsStructuredToolResultsAndTrajectory() {
+        RentalAgentRuntime runtime = mock(RentalAgentRuntime.class);
+        when(runtime.available()).thenReturn(true);
+        RoomSearchTool.RoomHit room = new RoomSearchTool.RoomHit(
+                930001L, "27公寓张江店", "A101", new BigDecimal("2300"), 920001L);
+        KnowledgeCitation citation = new KnowledgeCitation(
+                "deposit-1", 12L, "租房政策.md", "DEPOSIT", "押金", "退还条件",
+                "租房政策.md", 1, "完成结算后按合同退还押金。", 0.9);
+        when(runtime.execute(org.mockito.ArgumentMatchers.any())).thenReturn(new AgentResult(
+                "已找到房源，并附上押金规则。", "luna", "trace-1",
+                List.of(
+                        new AgentObservation("search_available_rooms", List.of(room)),
+                        new AgentObservation("search_rental_knowledge", new KnowledgeSearchResult(
+                                "押金怎么退", "押金怎么退 退还条件", "HYBRID", List.of(citation)))),
+                List.of(new AgentStep(1, "luna", "search_available_rooms", "SUCCESS", 5, 1, null))));
         @SuppressWarnings("unchecked")
-        ObjectProvider<org.springframework.ai.chat.client.ChatClient> chatClients = mock(ObjectProvider.class);
-        @SuppressWarnings("unchecked")
-        ObjectProvider<org.springframework.ai.vectorstore.VectorStore> vectorStores = mock(ObjectProvider.class);
-        var engine = new ModelRentalChatEngine(chatClients, vectorStores, new RagProperties());
-        Document room = new Document("27公寓A101 月租2300",
-                Map.of("namespace", "rooms", "roomRef", 930001L, "source", "27公寓张江店"));
-        Document policy = new Document("押一付一", Map.of("namespace", "doc"));
+        ObjectProvider<RentalAgentRuntime> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(runtime);
+        ModelRentalChatEngine engine = new ModelRentalChatEngine(provider, new AiAgentProperties());
+        List<ChatSseEvent> events = new ArrayList<>();
 
-        assertThat(engine.buildContext(List.of(room, policy))).contains("[1]", "[2]", "27公寓A101", "押一付一");
-        assertThat(engine.toCitations(List.of(room, policy)))
-                .singleElement()
-                .satisfies(citation -> {
-                    assertThat(citation.getRoomId()).isEqualTo(930001L);
-                    assertThat(citation.getApartment()).isEqualTo("27公寓张江店");
-                    assertThat(citation.getSource()).isEqualTo("rooms");
-                });
+        engine.chat(new RentalChatEngine.ChatExecution(
+                7L, "conv-1", "预算2500元，押金怎么退", List.of()), events::add);
+
+        assertThat(events).extracting(ChatSseEvent::getType)
+                .containsExactly("meta", "message", "recommendations", "citations", "trajectory", "done");
+        AiChatMetaVo meta = (AiChatMetaVo) events.getFirst().getPayload();
+        assertThat(meta.getProvider()).isEqualTo("luna");
+        assertThat(meta.getTraceId()).isEqualTo("trace-1");
+        assertThat((List<?>) event(events, "recommendations").getPayload()).hasSize(1);
+        assertThat((List<?>) event(events, "citations").getPayload()).hasSize(1);
     }
 
     @Test
@@ -83,6 +104,10 @@ class RentalChatServiceImplTest {
 
         assertThatThrownBy(() -> service.chat(1L, request("../../shared", "hello"), event -> { }))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private ChatSseEvent event(List<ChatSseEvent> events, String type) {
+        return events.stream().filter(item -> type.equals(item.getType())).findFirst().orElseThrow();
     }
 
     private ChatRequestVo request(String conversationId, String message) {
