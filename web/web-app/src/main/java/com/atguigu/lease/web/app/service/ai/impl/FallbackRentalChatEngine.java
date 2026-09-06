@@ -1,6 +1,8 @@
 package com.atguigu.lease.web.app.service.ai.impl;
 
 import com.atguigu.lease.web.app.service.ai.RentalChatEngine;
+import com.atguigu.lease.notification.AppointmentNotificationStore;
+import com.atguigu.lease.notification.AppointmentDeliveryStatus;
 import com.atguigu.lease.web.app.service.ai.rag.KnowledgeCitation;
 import com.atguigu.lease.web.app.service.ai.rag.KnowledgeSearchResult;
 import com.atguigu.lease.web.app.service.ai.rag.RentalKnowledgeService;
@@ -29,10 +31,13 @@ public class FallbackRentalChatEngine implements RentalChatEngine {
 
     private final RoomSearchTool roomSearchTool;
     private final RentalKnowledgeService knowledgeService;
+    private final AppointmentNotificationStore notifications;
 
-    public FallbackRentalChatEngine(RoomSearchTool roomSearchTool, RentalKnowledgeService knowledgeService) {
+    public FallbackRentalChatEngine(RoomSearchTool roomSearchTool, RentalKnowledgeService knowledgeService,
+                                    AppointmentNotificationStore notifications) {
         this.roomSearchTool = roomSearchTool;
         this.knowledgeService = knowledgeService;
+        this.notifications = notifications;
     }
 
     @Override
@@ -42,6 +47,7 @@ public class FallbackRentalChatEngine implements RentalChatEngine {
 
     @Override
     public void chat(ChatExecution execution, Consumer<ChatSseEvent> sink) {
+        if (queryDelivery(execution, sink)) return;
         RentRange range = rentRange(execution.message());
         String city = group(CITY, execution.message());
         String district = group(DISTRICT, execution.message());
@@ -64,13 +70,59 @@ public class FallbackRentalChatEngine implements RentalChatEngine {
                 "suggestedAction", rooms.isEmpty() ? "NONE" : "SELECT_ROOM")));
     }
 
+    private boolean queryDelivery(ChatExecution execution, Consumer<ChatSseEvent> sink) {
+        String message = execution.message();
+        boolean statusQuery = message.contains("预约") &&
+                (message.contains("状态") || message.contains("成功") || message.contains("进度") || message.contains("送达"));
+        boolean notificationQuery = message.contains("通知") || message.contains("消息列表");
+        if (!statusQuery && !notificationQuery) return false;
+        String traceId = UUID.randomUUID().toString();
+        String answer;
+        Object result = null;
+        String type;
+        if (statusQuery) {
+            type = "appointment_status";
+            Matcher matcher = Pattern.compile("(?:预约(?:编号|ID|id|号)?[：:#\\s]*)([0-9]{1,18})(?![0-9])").matcher(message);
+            if (!matcher.find()) {
+                answer = "请提供确认接口返回的预约编号，例如：预约123的状态。草稿 token 和房间编号不是预约编号。";
+            } else {
+                AppointmentDeliveryStatus status = notifications.status(execution.userId(), Long.valueOf(matcher.group(1)));
+                result = status;
+                answer = status == null ? "未找到该预约。" : "预约编号：" + status.appointmentId()
+                        + "；预约状态：" + switch (status.appointmentStatus() == null ? 0 : status.appointmentStatus()) {
+                            case 1 -> "待看房";
+                            case 2 -> "已取消";
+                            case 3 -> "已看房";
+                            default -> "未知";
+                        } + "；站内通知：" + switch (status.deliveryStatus()) {
+                            case "DELIVERED" -> "已送达站内通知，不代表短信已发送。";
+                            case "PUBLISHED" -> "MQ 已接收，尚未查到通知落库；不是送达成功。";
+                            case "PENDING" -> "等待异步投递。";
+                            case "FAILED" -> "发布重试耗尽，需运维核查；预约不会因此被取消。";
+                            default -> "暂无可确认的投递记录。";
+                        };
+            }
+        } else {
+            type = "notifications";
+            var items = notifications.list(execution.userId(), 20);
+            result = items;
+            answer = items.isEmpty() ? "暂无已送达的站内通知，这不代表您没有预约。"
+                    : "查到 " + items.size() + " 条站内通知，详情见通知列表。";
+        }
+        sink.accept(new ChatSseEvent("meta", new AiChatMetaVo(mode(), execution.conversationId(), "local-rules", traceId)));
+        sink.accept(new ChatSseEvent("message", answer));
+        sink.accept(new ChatSseEvent(type, result));
+        sink.accept(new ChatSseEvent("done", Map.of("traceId", traceId, "suggestedAction", "NONE")));
+        return true;
+    }
+
     private String answer(List<RoomSearchTool.RoomHit> rooms,
                           KnowledgeSearchResult knowledge) {
         String roomSummary = rooms.isEmpty()
                 ? "暂未找到完全符合条件的在租房源，可以适当放宽预算或区域。"
                 : "找到 " + rooms.size() + " 套符合条件的在租房源，已整理在推荐列表中。";
         String knowledgeSummary = knowledge.citations().isEmpty()
-                ? ""
+                ? " 暂无相关政策证据，不能据此承诺具体租赁规则。"
                 : summary(knowledge.citations().getFirst());
         return roomSummary + knowledgeSummary;
     }

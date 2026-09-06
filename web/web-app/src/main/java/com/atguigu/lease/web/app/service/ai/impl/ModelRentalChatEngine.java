@@ -59,6 +59,15 @@ public class ModelRentalChatEngine implements RentalChatEngine {
         sink.accept(new ChatSseEvent("message", result.answer()));
         sink.accept(new ChatSseEvent("recommendations", recommendations(result.observations())));
         sink.accept(new ChatSseEvent("citations", citations(result.observations())));
+        for (AgentObservation observation : result.observations()) {
+            String eventType = switch (observation.tool()) {
+                case "create_appointment_draft" -> "appointment_draft";
+                case "get_appointment_status" -> "appointment_status";
+                case "list_my_notifications" -> "notifications";
+                default -> null;
+            };
+            if (eventType != null) sink.accept(new ChatSseEvent(eventType, observation.payload()));
+        }
         if (!result.trajectory().isEmpty()) {
             sink.accept(new ChatSseEvent("trajectory", result.trajectory()));
         }

@@ -23,7 +23,7 @@ public class LocalRentalKnowledgeService {
         List<KnowledgeSection> matches = sections.stream()
                 .filter(section -> matches(query, section.title()))
                 .toList();
-        return matches.isEmpty() ? sections.stream().limit(2).toList() : matches;
+        return matches;
     }
 
     private boolean matches(String query, String title) {

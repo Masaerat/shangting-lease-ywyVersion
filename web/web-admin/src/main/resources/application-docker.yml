@@ -22,6 +22,8 @@ spring:
     username: ${RABBITMQ_USER:lease}
     password: ${RABBITMQ_PASSWORD:lease}
     virtual-host: /
+    publisher-confirm-type: correlated
+    publisher-returns: true
   autoconfigure:
     exclude:
       - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration

@@ -39,7 +39,7 @@ class AppointmentOutboxPublisherTest {
         publisher.publishBatch();
 
         verify(sender).send(event);
-        verify(repository).markPublished(11L, NOW);
+        verify(repository).markPublished(11L, 1, NOW);
         verify(repository, never()).markFailed(org.mockito.ArgumentMatchers.anyLong(),
                 org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean());
@@ -56,6 +56,7 @@ class AppointmentOutboxPublisherTest {
 
         verify(repository).markFailed(12L, 2, NOW.plusSeconds(4), "broker unavailable", false);
         verify(repository, never()).markPublished(org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyInt(),
                 org.mockito.ArgumentMatchers.any());
     }
 

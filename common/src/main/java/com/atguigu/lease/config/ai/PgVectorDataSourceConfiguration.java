@@ -75,7 +75,7 @@ public class PgVectorDataSourceConfiguration {
     }
 
     @Bean
-    public VectorStore vectorStore(JdbcTemplate pgJdbcTemplate,
+    public VectorStore vectorStore(@Qualifier("pgJdbcTemplate") JdbcTemplate pgJdbcTemplate,
                                    EmbeddingModel embeddingModel,
                                    @Value("${spring.ai.vectorstore.pgvector.dimensions:1024}") int dimensions) throws Exception {
         return PgVectorStore.builder(pgJdbcTemplate, embeddingModel)

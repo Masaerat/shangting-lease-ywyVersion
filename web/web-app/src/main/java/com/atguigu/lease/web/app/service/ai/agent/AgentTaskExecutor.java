@@ -25,6 +25,7 @@ public class AgentTaskExecutor {
             future.cancel(true);
             throw new AgentExecutionException("Agent operation timed out", timeoutType, e);
         } catch (InterruptedException e) {
+            future.cancel(true);
             Thread.currentThread().interrupt();
             throw new AgentExecutionException("Agent operation was interrupted", "INTERRUPTED", e);
         } catch (ExecutionException e) {

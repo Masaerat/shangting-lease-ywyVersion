@@ -46,7 +46,7 @@ public class RabbitMQConfig {
     public static final String EXPIRE_ROUTING_KEY = "view.appointment.expire";
     public static final String DLX_ROUTING_KEY = "appointment.dlx";
 
-    // TTL（毫秒）- 2小时后发送提醒
+    // Queue retention only: expiration is not an appointment reminder or cancellation.
     public static final long TTL_2_HOURS = 2 * 60 * 60 * 1000L;
 
     /**
@@ -82,7 +82,9 @@ public class RabbitMQConfig {
      */
     @Bean
     public Queue appointmentNotifyQueue() {
-        return QueueBuilder.durable(APPOINTMENT_NOTIFY_QUEUE).build();
+        return QueueBuilder.durable(APPOINTMENT_NOTIFY_QUEUE)
+                .withArgument("x-dead-letter-exchange", DLX_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", DLX_ROUTING_KEY).build();
     }
 
     /**
@@ -128,11 +130,17 @@ public class RabbitMQConfig {
  * 配置RabbitTemplate
  */
 @Bean
-public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+public Jackson2JsonMessageConverter appointmentMessageConverter() {
+    // Also discovered by Boot's Rabbit listener factory; producer-only configuration is insufficient.
+    return new Jackson2JsonMessageConverter("com.atguigu.lease.message.appointment");
+}
+
+@Bean
+public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory, Jackson2JsonMessageConverter appointmentMessageConverter) {
     RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
     rabbitTemplate.setMandatory(true);
     // 设置消息转换器
-    rabbitTemplate.setMessageConverter(new Jackson2JsonMessageConverter());
+    rabbitTemplate.setMessageConverter(appointmentMessageConverter);
     // 设置消息确认回调
     rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -> {
         Logger logger = LoggerFactory.getLogger(RabbitMQConfig.class);
@@ -145,7 +153,8 @@ public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
     // 设置返回回调
     rabbitTemplate.setReturnsCallback(returned -> {
         Logger logger = LoggerFactory.getLogger(RabbitMQConfig.class);
-        logger.error("消息未送达队列: {}", returned.getMessage());
+        logger.error("消息未路由: exchange={}, routingKey={}, code={}",
+                returned.getExchange(), returned.getRoutingKey(), returned.getReplyCode());
     });
     return rabbitTemplate;
 }

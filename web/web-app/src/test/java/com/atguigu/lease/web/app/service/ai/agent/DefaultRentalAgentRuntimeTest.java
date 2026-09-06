@@ -101,6 +101,47 @@ class DefaultRentalAgentRuntimeTest {
         return new DefaultRentalAgentRuntime(provider, registry, new AiAgentProperties(), executor, manager);
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void preservesPreparedDraftWhenFinalModelCallFailsWithoutReplayingTools() {
+        ChatModel model = mock(ChatModel.class);
+        when(model.call(any(Prompt.class))).thenReturn(response("", List.of(new AssistantMessage.ToolCall(
+                "draft", "function", "create_appointment_draft", "{}"))))
+                .thenThrow(new IllegalStateException("model unavailable"));
+        ToolRegistry registry = mock(ToolRegistry.class);
+        when(registry.callbacks()).thenReturn(List.of());
+        org.mockito.Mockito.doAnswer(invocation -> {
+            AgentExecutionState state = invocation.getArgument(2);
+            state.registerToolRequest("create_appointment_draft", 3);
+            state.recordObservation("create_appointment_draft", Map.of("confirmationToken", "test-token"));
+            return null;
+        }).when(registry).validate(any(), any(), any());
+        ToolCallingManager manager = mock(ToolCallingManager.class);
+        ToolExecutionResult execution = mock(ToolExecutionResult.class);
+        when(execution.conversationHistory()).thenReturn(List.<Message>of(new UserMessage("draft")));
+        when(manager.executeToolCalls(any(), any())).thenReturn(execution);
+        ObjectProvider<ChatModel> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(model);
+        AiAgentProperties properties = new AiAgentProperties();
+        properties.setPrimaryModel("primary");
+        properties.setFallbackModel("fallback");
+        var result = new DefaultRentalAgentRuntime(provider, registry, properties, executor, manager).execute(context(4));
+        assertThat(result.model()).isEqualTo("primary");
+        assertThat(result.observations()).singleElement().satisfies(o -> assertThat(o.tool()).isEqualTo("create_appointment_draft"));
+        assertThat(result.trajectory()).last().satisfies(step -> assertThat(step.status()).isEqualTo("PARTIAL"));
+        verify(model, org.mockito.Mockito.times(2)).call(any(Prompt.class));
+        verify(manager).executeToolCalls(any(), any());
+    }
+
+    @Test
+    void requestStateEnforcesSharedBudget() {
+        var state = new AgentExecutionState();
+        state.beginModelStep(1);
+        assertThatThrownBy(() -> state.beginModelStep(1)).isInstanceOf(AgentExecutionException.class);
+        var expired = new AgentExecutionState(System.nanoTime() - 1);
+        assertThatThrownBy(() -> expired.toolTimeout(3000)).isInstanceOf(AgentExecutionException.class);
+    }
+
     private AgentContext context(int maxSteps) {
         return new AgentContext(7L, "conv-1", "预算2500", List.of(), AgentGoal.FIND_ROOM, maxSteps);
     }

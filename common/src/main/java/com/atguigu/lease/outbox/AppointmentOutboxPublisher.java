@@ -22,7 +22,7 @@ public class AppointmentOutboxPublisher {
     @Autowired
     public AppointmentOutboxPublisher(AppointmentOutboxRepository repository,
                                       AppointmentEventSender sender) {
-        this(repository, sender, Clock.systemUTC(), 20);
+        this(repository, sender, Clock.systemUTC(), 1);
     }
 
     AppointmentOutboxPublisher(AppointmentOutboxRepository repository,
@@ -39,11 +39,11 @@ public class AppointmentOutboxPublisher {
         for (OutboxEvent event : repository.claimPending(batchSize, now)) {
             try {
                 sender.send(event);
-                repository.markPublished(event.id(), now);
+                repository.markPublished(event.id(), event.attempts(), clock.instant());
                 published++;
             } catch (RuntimeException exception) {
                 boolean dead = event.attempts() >= MAX_ATTEMPTS;
-                Instant nextAttempt = dead ? now : now.plusSeconds(backoffSeconds(event.attempts()));
+                Instant nextAttempt = dead ? clock.instant() : clock.instant().plusSeconds(backoffSeconds(event.attempts()));
                 repository.markFailed(event.id(), event.attempts(), nextAttempt,
                         errorMessage(exception), dead);
                 LOGGER.warn("Appointment outbox event {} publish failed on attempt {}",

@@ -57,6 +57,7 @@ public class MessageService {
 
         logger.info("开始发送预约状态变更消息，预约ID: {}", appointmentId);
         AppointmentNotificationMessage message = AppointmentNotificationMessage.builder()
+                .messageId(java.util.UUID.randomUUID().toString())
                 .appointmentId(appointmentId)
                 .userId(userId)
                 .name(name)

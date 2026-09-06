@@ -110,6 +110,64 @@ class RentalChatServiceImplTest {
         return events.stream().filter(item -> type.equals(item.getType())).findFirst().orElseThrow();
     }
 
+    @Test
+    void modelDraftIsExposedWithItsConfirmationToken() {
+        RentalAgentRuntime runtime = mock(RentalAgentRuntime.class);
+        when(runtime.available()).thenReturn(true);
+        var draft = new com.atguigu.lease.web.app.vo.ai.appointment.AppointmentDraftResponse(
+                "secret-token", java.time.Instant.now().plusSeconds(600), 10L, 20L,
+                "用户", "13800000000", java.time.LocalDateTime.now().plusDays(1), null);
+        when(runtime.execute(org.mockito.ArgumentMatchers.any())).thenReturn(new AgentResult(
+                "请确认草稿", "test", "trace", List.of(new AgentObservation("create_appointment_draft", draft)), List.of()));
+        @SuppressWarnings("unchecked") ObjectProvider<RentalAgentRuntime> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(runtime);
+        var events = new ArrayList<ChatSseEvent>();
+        new ModelRentalChatEngine(provider, new AiAgentProperties()).chat(
+                new RentalChatEngine.ChatExecution(7L, "conv", "预约", List.of()), events::add);
+        assertThat(event(events, "appointment_draft").getPayload()).isSameAs(draft);
+        assertThat(event(events, "done").getPayload().toString()).contains("CONFIRM_APPOINTMENT");
+    }
+
+    @Test
+    void historyPreservesMultilineMessagesAndCacheFailureDoesNotFailChat() {
+        CacheUtil cache = mock(CacheUtil.class);
+        RentalChatEngine fallback = mock(RentalChatEngine.class);
+        var stored = new java.util.concurrent.atomic.AtomicReference<String>();
+        org.mockito.Mockito.doAnswer(invocation -> {
+            stored.set(invocation.getArgument(1));
+            return null;
+        }).when(cache).set(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+        when(cache.get(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(String.class)))
+                .thenAnswer(invocation -> stored.get());
+        var service = new RentalChatServiceImpl(null, fallback, new RagProperties(), cache, Runnable::run);
+        service.chat(7L, request("conv", "第一行\n第二行"), e -> {});
+        service.chat(7L, request("conv", "继续"), e -> {});
+        var execution = org.mockito.ArgumentCaptor.forClass(RentalChatEngine.ChatExecution.class);
+        org.mockito.Mockito.verify(fallback, org.mockito.Mockito.times(2)).chat(execution.capture(), org.mockito.ArgumentMatchers.any());
+        assertThat(execution.getAllValues().get(1).history()).containsExactly("用户:第一行\n第二行", "顾问:");
+
+        when(cache.get(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(String.class)))
+                .thenThrow(new IllegalStateException("redis down"));
+        org.mockito.Mockito.doThrow(new IllegalStateException("redis down")).when(cache).set(
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+        org.assertj.core.api.Assertions.assertThatCode(() -> service.chat(7L, request("conv", "继续"), e -> {})).doesNotThrowAnyException();
+    }
+
+    @Test
+    void legacyHistoryRemainsReadable() {
+        CacheUtil cache = mock(CacheUtil.class);
+        when(cache.get(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(String.class)))
+                .thenReturn("用户:预算2500\n顾问:已找到");
+        RentalChatEngine fallback = mock(RentalChatEngine.class);
+        new RentalChatServiceImpl(null, fallback, new RagProperties(), cache, Runnable::run)
+                .chat(7L, request("conv", "继续"), e -> {});
+        var execution = org.mockito.ArgumentCaptor.forClass(RentalChatEngine.ChatExecution.class);
+        org.mockito.Mockito.verify(fallback).chat(execution.capture(), org.mockito.ArgumentMatchers.any());
+        assertThat(execution.getValue().history()).containsExactly("用户:预算2500", "顾问:已找到");
+    }
+
     private ChatRequestVo request(String conversationId, String message) {
         var request = new ChatRequestVo();
         request.setConversationId(conversationId);

@@ -13,6 +13,8 @@ import java.util.Date;
 @AllArgsConstructor
 public class AppointmentNotificationMessage {
 
+    private String messageId;
+
     /**
      * 预约ID
      */

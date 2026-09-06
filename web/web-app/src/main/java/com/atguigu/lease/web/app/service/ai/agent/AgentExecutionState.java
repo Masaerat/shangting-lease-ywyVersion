@@ -16,6 +16,30 @@ public class AgentExecutionState {
     private final List<AgentStep> trajectory = new ArrayList<>();
     private final Map<String, Integer> toolCalls = new HashMap<>();
     private int nextStepNumber = 1;
+    private int modelSteps;
+    private final long deadlineNanos;
+
+    public AgentExecutionState() {
+        this(0);
+    }
+
+    public AgentExecutionState(long deadlineNanos) {
+        this.deadlineNanos = deadlineNanos;
+    }
+
+    public synchronized void beginModelStep(int maxSteps) {
+        if (++modelSteps > maxSteps) throw new AgentExecutionException("Agent step limit exceeded", "STEP_LIMIT");
+    }
+
+    public synchronized boolean hasToolRequests() {
+        return !toolCalls.isEmpty();
+    }
+
+    public java.time.Duration toolTimeout(long configuredMs) {
+        long remaining = deadlineNanos == 0 ? Long.MAX_VALUE : deadlineNanos - System.nanoTime();
+        if (remaining <= 0) throw new AgentExecutionException("Agent request timed out", "AGENT_TIMEOUT");
+        return java.time.Duration.ofNanos(Math.min(java.time.Duration.ofMillis(configuredMs).toNanos(), remaining));
+    }
 
     public String traceId() {
         return traceId;

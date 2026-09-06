@@ -36,7 +36,7 @@ class FallbackRentalChatEngineTest {
                                 "local-1", null, "rag-knowledge.md", "DEPOSIT", "押金与付款",
                                 "押金与付款", "rag-knowledge.md", 1,
                                 "签约时按合同约定支付押金。", 0.8))));
-        var engine = new FallbackRentalChatEngine(roomSearch, knowledge);
+        var engine = new FallbackRentalChatEngine(roomSearch, knowledge, mock(com.atguigu.lease.notification.AppointmentNotificationStore.class));
         List<ChatSseEvent> events = new ArrayList<>();
 
         engine.chat(new ChatExecution(7L, "conv-1", "预算2500并说明押金", List.of()), events::add);

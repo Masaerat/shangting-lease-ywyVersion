@@ -23,6 +23,7 @@ public class AppointmentOutboxRepository {
     }
 
     public List<OutboxEvent> claimPending(int batchSize, Instant now) {
+        if (batchSize < 1) return List.of();
         List<OutboxEvent> claimed = transactionTemplate.execute(status -> {
             List<OutboxEvent> events = jdbcTemplate.query("""
                             SELECT id, aggregate_id, event_type, payload_json, attempts
@@ -38,7 +39,7 @@ public class AppointmentOutboxRepository {
                             rs.getString("event_type"),
                             rs.getString("payload_json"),
                             rs.getInt("attempts") + 1),
-                    Timestamp.from(now), batchSize);
+                    Timestamp.from(now), 1); // Do not lease a batch that waits behind slow broker confirms.
             Instant leaseUntil = now.plus(CLAIM_LEASE);
             for (OutboxEvent event : events) {
                 jdbcTemplate.update("""
@@ -53,13 +54,13 @@ public class AppointmentOutboxRepository {
         return claimed == null ? List.of() : claimed;
     }
 
-    public void markPublished(Long eventId, Instant publishedAt) {
+    public void markPublished(Long eventId, int claimedAttempt, Instant publishedAt) {
         jdbcTemplate.update("""
                         UPDATE appointment_event_outbox
                         SET status = 'PUBLISHED', published_at = ?, last_error = NULL
-                        WHERE id = ? AND status = 'PENDING'
+                        WHERE id = ? AND status = 'PENDING' AND attempts = ?
                         """,
-                Timestamp.from(publishedAt), eventId);
+                Timestamp.from(publishedAt), eventId, claimedAttempt);
     }
 
     public void markFailed(Long eventId, int attempts, Instant nextAttemptAt,
@@ -67,13 +68,13 @@ public class AppointmentOutboxRepository {
         jdbcTemplate.update("""
                         UPDATE appointment_event_outbox
                         SET status = ?, attempts = ?, next_attempt_at = ?, last_error = ?
-                        WHERE id = ? AND status = 'PENDING'
+                        WHERE id = ? AND status = 'PENDING' AND attempts = ?
                         """,
                 dead ? "DEAD" : "PENDING",
                 attempts,
                 Timestamp.from(nextAttemptAt),
                 truncate(error, 500),
-                eventId);
+                eventId, attempts);
     }
 
     private static String truncate(String value, int maxLength) {

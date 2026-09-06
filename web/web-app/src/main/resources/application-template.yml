@@ -35,6 +35,8 @@ spring:
     username: guest
     password: guest
     virtual-host: /
+    publisher-confirm-type: correlated
+    publisher-returns: true
 
   # Spring AI:OpenAI 兼容协议(GLM 等)+ pgvector 向量库
   autoconfigure:

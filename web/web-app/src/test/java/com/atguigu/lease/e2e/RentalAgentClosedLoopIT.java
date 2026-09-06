@@ -29,8 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "spring.profiles.active=docker",
         "server.port=0",
-        "spring.rabbitmq.listener.simple.auto-startup=false",
-        "spring.rabbitmq.listener.direct.auto-startup=false",
+        "spring.rabbitmq.listener.simple.auto-startup=true",
+        "spring.rabbitmq.listener.direct.auto-startup=true",
         "spring.ai.openai.api-key=",
         "app.datasource.pg.url=",
         "app.outbox.enabled=false",
@@ -50,6 +50,12 @@ class RentalAgentClosedLoopIT {
             DockerImageName.parse("redis:7.4-alpine"))
             .withExposedPorts(6379);
 
+    @Container
+    private static final GenericContainer<?> RABBIT = new GenericContainer<>(DockerImageName.parse("rabbitmq:3.13-management-alpine"))
+            .withEnv("RABBITMQ_DEFAULT_USER", "lease")
+            .withEnv("RABBITMQ_DEFAULT_PASS", "lease")
+            .withExposedPorts(5672);
+
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
@@ -57,6 +63,10 @@ class RentalAgentClosedLoopIT {
         registry.add("spring.datasource.password", MYSQL::getPassword);
         registry.add("spring.data.redis.host", REDIS::getHost);
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
+        registry.add("spring.rabbitmq.host", RABBIT::getHost);
+        registry.add("spring.rabbitmq.port", () -> RABBIT.getMappedPort(5672));
+        registry.add("spring.rabbitmq.username", () -> "lease");
+        registry.add("spring.rabbitmq.password", () -> "lease");
     }
 
     @LocalServerPort
@@ -64,6 +74,10 @@ class RentalAgentClosedLoopIT {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired private com.atguigu.lease.outbox.AppointmentOutboxPublisher publisher;
+    @Autowired private com.atguigu.lease.outbox.AppointmentEventSender sender;
+    @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
@@ -111,6 +125,41 @@ class RentalAgentClosedLoopIT {
         assertThat(replay.path("appointmentId").asLong()).isEqualTo(appointmentId);
         assertThat(replay.path("idempotentReplay").asBoolean()).isTrue();
         assertThat(appointments(token).findValuesAsText("id")).contains(Long.toString(appointmentId));
+
+        // Scheduler is disabled so the transaction -> MQ boundary can be asserted explicitly.
+        assertThat(getJson("/app/ai/appointments/" + appointmentId + "/status", token)
+                .path("data").path("deliveryStatus").asText()).isEqualTo("PENDING");
+        assertThat(getJson("/app/ai/notifications", token).path("data")).isEmpty();
+        assertThat(publisher.publishBatch()).isEqualTo(1);
+        org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(20)).untilAsserted(() ->
+                assertThat(getJson("/app/ai/appointments/" + appointmentId + "/status", token)
+                        .path("data").path("deliveryStatus").asText()).isEqualTo("DELIVERED"));
+
+        var delivered = event(chat(token, "预约" + appointmentId + "的状态"), "appointment_status").path("payload");
+        assertThat(delivered.path("deliveryStatus").asText()).isEqualTo("DELIVERED");
+        assertThat(event(chat(token, "我的通知"), "notifications").path("payload")).hasSize(1);
+
+        // Redeliver the same persisted event through the real broker, not by invoking the consumer directly.
+        var outbox = jdbc.queryForObject("SELECT * FROM appointment_event_outbox WHERE aggregate_id = ?",
+                (rs, row) -> new com.atguigu.lease.outbox.OutboxEvent(rs.getLong("id"), appointmentId,
+                        rs.getString("event_type"), rs.getString("payload_json"), rs.getInt("attempts")), appointmentId);
+        sender.send(outbox);
+        long notificationId = delivered.path("notificationId").asLong();
+        assertSuccess(postJson("/app/ai/notifications/" + notificationId + "/read", token, Map.of()));
+        org.awaitility.Awaitility.await().during(java.time.Duration.ofSeconds(2))
+                .atMost(java.time.Duration.ofSeconds(10)).untilAsserted(() -> {
+                    var notifications = getJson("/app/ai/notifications", token).path("data");
+                    assertThat(notifications).hasSize(1);
+                    assertThat(notifications.get(0).path("readAt").isNull()).isFalse();
+                });
+    }
+
+    private JsonNode getJson(String path, String token) throws Exception {
+        var response = httpClient.send(request(path, token).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode body = objectMapper.readTree(response.body());
+        assertSuccess(body);
+        return body;
     }
 
     private String login(String phone, String code) throws Exception {
