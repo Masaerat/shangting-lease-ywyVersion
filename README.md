@@ -4,7 +4,7 @@
 
 项目不是单独包装一次大模型调用，而是把“自然语言找房 → 查询真实房源 → 引用租赁知识 → 计算入住成本 → 生成预约草稿 → 用户显式确认 → 异步投递 → 站内通知与状态查询”串成了可测试、可降级、可追踪的业务闭环。
 
-> 当前重点是后端能力。前端源码仍保留用于展示，但后端可以只依赖 Docker 启动，并通过 Knife4j、Postman、Apifox 或 `curl` 独立调试。
+> 当前仓库专注后端，使用 Docker 即可启动，通过 Knife4j、Postman、Apifox 或 `curl` 调试。原 H5 源码已从当前目录移除，需要时可从 Git 历史提交 `a20894b` 恢复。
 
 ## 项目亮点
 
@@ -21,7 +21,7 @@
 
 ```mermaid
 flowchart LR
-    Client[Knife4j / Postman / H5] --> App[web-app :8081]
+    Client[Knife4j / Postman / Apifox] --> App[web-app :8081]
     AdminClient[后台接口调用方] --> Admin[web-admin :8080]
     App --> Auth[JWT 认证]
     App --> Runtime[Agent Runtime]
@@ -70,25 +70,26 @@ Knife4j 是项目唯一的接口文档 UI。Springdoc 只是 Knife4j 依赖的 O
 
 ```text
 .
-├── common/                         # 公共配置、工具类、RAG/PG 数据源、MQ 与 Outbox 基础设施
-├── model/                          # MySQL 实体、枚举和共享数据模型
-├── web/
-│   ├── web-admin/                  # 管理端 API：房源、租约、用户、知识库入库与索引
-│   └── web-app/                    # 用户端 API：认证、Agent、预约闭环、通知查询
-├── db/
-│   ├── ai-rental-agent/            # AI 知识文档元数据表说明
-│   └── pgvector/                   # PGvector 初始化脚本
-├── docker/minio/                   # MinIO 初始化脚本
-├── frontend/rent-house-h5/         # 可选 H5；后端调试不依赖它
-├── scripts/                        # Compose 健康检查与 Agent 闭环 smoke 脚本
-├── docs/ai-rental-agent/           # 最终架构、API、面试、RAG、MQ 与验收文档
-├── compose.yaml                    # 完整本地编排
-├── Dockerfile                      # Java 模块多阶段构建
-├── .env.example                    # 脱敏环境变量模板
-└── pom.xml                         # Maven 父工程
+├── backend/                        # Java 后端工程，IDE 导入此目录的 pom.xml
+│   ├── common/                     # 公共配置、RAG 数据源、MQ 与 Outbox 基础设施
+│   ├── model/                      # 两个应用共享的实体、枚举和数据模型
+│   ├── web-admin/                  # 管理端 API：房源、租约、用户、知识库入库
+│   ├── web-app/                    # 用户端 API：认证、Agent、预约闭环、通知
+│   └── pom.xml                     # 统一依赖版本，聚合四个平级模块
+├── deploy/                         # 环境部署与验收工具
+│   ├── Dockerfile                  # Java 多阶段构建
+│   ├── minio/                      # 对象存储桶与演示图片初始化
+│   ├── pgvector/                   # PostgreSQL 向量扩展初始化
+│   ├── verify.ps1                  # 基础设施和两个后端健康检查
+│   └── smoke.ps1                   # 登录、Agent、预约与结果查询冒烟测试
+├── docs/                           # 架构、API、面试、RAG、MQ 与验收文档
+├── compose.yaml                    # 从仓库根目录一条命令启动后端环境
+└── .env.example                    # 脱敏环境变量模板
 ```
 
-Java 模块保持标准 Maven 结构，没有为了“看起来更整齐”移动包路径；这样可以避免破坏依赖关系、Mapper 扫描和历史提交。
+根目录按“后端代码、部署资源、项目文档”划分为三个主目录。四个 Java 模块平级放在 `backend/` 下，原来只做聚合的 `web/pom.xml` 已移除；Java 包名、应用名称和 API 地址保持一致。
+
+`model` 是两个应用共用的数据模型，必须保持独立。把它放入 `web-app` 会让管理端依赖用户端应用，混淆模块职责。构建环境由 Docker 中固定的 Maven 3.9.9 与 JDK 21 提供，因此移除了重复的 Maven Wrapper；MinIO 初始化与检查脚本统一收进 `deploy/`，用于保持上传、演示图片和后端验收能力。业务表结构以 `backend/web-app/src/main/resources/db/migration/` 中的 Flyway 迁移为准，已经删除重复的独立建表 SQL。
 
 ## 迭代路线
 
@@ -102,7 +103,7 @@ Java 模块保持标准 Maven 结构，没有为了“看起来更整齐”移�
 | 6. MQ 闭环 | Transactional Outbox、RabbitMQ、站内通知、DLQ | 处理数据库提交与消息发送的一致性问题 |
 | 7. 质量闭环 | 分层记忆、查询改写、RRF、30 条评测集、诊断接口 | 避免粗暴截断上下文，并让 RAG 效果可度量 |
 
-每个阶段的代码落点、事务边界、失败场景和面试追问详见[升级改造全解与面试手册](docs/ai-rental-agent/agent-rag-mq-interview-handbook.md)。
+每个阶段的代码落点、事务边界、失败场景和面试追问详见[升级改造全解与面试手册](docs/agent-rag-mq-interview-handbook.md)。
 
 ## 仅使用 Docker 启动后端
 
@@ -163,11 +164,11 @@ Docker 演示配置默认支持：
 ### 3. 验证服务
 
 ```powershell
-.\scripts\verify-compose.ps1
-.\scripts\smoke-rental-agent.ps1
+.\deploy\verify.ps1
+.\deploy\smoke.ps1
 ```
 
-`verify-compose.ps1` 默认只检查基础设施和两个后端；如果同时启动了 H5，可使用 `.\scripts\verify-compose.ps1 -IncludeFrontend` 增加前端检查。`smoke-rental-agent.ps1` 会执行登录、SSE 对话、预约草稿、确认、幂等重放和结果查询。
+`verify.ps1` 检查基础设施和两个后端。`smoke.ps1` 会执行登录、SSE 对话、预约草稿、确认、幂等重放和结果查询。
 
 停止服务：
 
@@ -186,7 +187,7 @@ docker compose down
 5. 调用 `/app/ai/appointments/draft` 生成草稿，再调用 `/confirm` 明确确认。
 6. 通过预约状态和通知接口检查 `PENDING → PUBLISHED → DELIVERED`。其中 `PUBLISHED` 只表示 Broker 已确认接收，不等于用户已读。
 
-完整请求体、响应字段和注意事项见 [API 文档](docs/ai-rental-agent/api.md)。
+完整请求体、响应字段和注意事项见 [API 文档](docs/api.md)。
 
 ## 自动化验证
 
@@ -195,31 +196,31 @@ docker compose down
 ```powershell
 docker run --rm `
   -v "${PWD}:/workspace" `
-  -w /workspace `
+  -w /workspace/backend `
   maven:3.9.9-eclipse-temurin-21 `
-  mvn -B -ntp -pl web/web-app,web/web-admin -am `
+  mvn -B -ntp -pl web-app,web-admin -am `
   '-Dtest=*Test,!ScheduledTasksTest' `
   '-Dsurefire.failIfNoSpecifiedTests=false' test
 ```
 
-当前已验证的非集成回归：
+目录重构后已重新验证：
 
 - `web-app`：92 项测试通过。
 - `web-admin`：4 项测试通过。
-- Maven 六模块 reactor 编译通过。
+- Maven Reactor 的 `lease` 父工程与四个子模块全部构建成功。
 - 30 条 LOCAL RAG 基线：`HitRate@3=1.0`、`MRR=1.0`、拒答准确率 `1.0`、同义问题一致性 `1.0`。
 
-RAG 数字只代表当前小规模本地知识回归集，用于防止代码退化；不能表述为真实 PGvector、线上模型或大规模生产效果。Testcontainers `*IT`、真实模型调用和生产压测不包含在上述 96 项测试中。详见[最终验证记录](docs/ai-rental-agent/verification.md)。
+RAG 数字只代表当前小规模本地知识回归集，用于防止代码退化；不能表述为真实 PGvector、线上模型或大规模生产效果。Testcontainers `*IT`、真实模型调用和生产压测不包含在上述 96 项测试中。详见[最终验证记录](docs/verification.md)。
 
 ## 文档导航
 
-- [文档总索引](docs/ai-rental-agent/README.md)：不同阅读目标对应哪份文档。
-- [升级改造全解与面试手册](docs/ai-rental-agent/agent-rag-mq-interview-handbook.md)：整体架构、每轮迭代、代码实现、故障推演和面试题。
-- [API 文档](docs/ai-rental-agent/api.md)：认证、SSE、RAG、预约和通知接口。
-- [分层记忆与 RAG 评测](docs/ai-rental-agent/context-memory-and-rag-evaluation.md)：压缩上下文、混合检索和指标设计。
-- [Agent 与 MQ 闭环](docs/ai-rental-agent/mq-closed-loop.md)：状态语义、可靠性、部署风险和重放。
-- [简历素材](docs/ai-rental-agent/resume.md)：可直接改写的项目描述和能力边界。
-- [最终验证记录](docs/ai-rental-agent/verification.md)：已验证、未验证和不能过度宣称的内容。
+- [文档总索引](docs/README.md)：不同阅读目标对应哪份文档。
+- [升级改造全解与面试手册](docs/agent-rag-mq-interview-handbook.md)：整体架构、每轮迭代、代码实现、故障推演和面试题。
+- [API 文档](docs/api.md)：认证、SSE、RAG、预约和通知接口。
+- [分层记忆与 RAG 评测](docs/context-memory-and-rag-evaluation.md)：压缩上下文、混合检索和指标设计。
+- [Agent 与 MQ 闭环](docs/mq-closed-loop.md)：状态语义、可靠性、部署风险和重放。
+- [简历素材](docs/resume.md)：可直接改写的项目描述和能力边界。
+- [最终验证记录](docs/verification.md)：已验证、未验证和不能过度宣称的内容。
 
 ## 能力边界
 

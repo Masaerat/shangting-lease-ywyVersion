@@ -108,7 +108,7 @@ services:
       POSTGRES_PASSWORD: ${PG_PASSWORD:-lease}
     volumes:
       - pgvector-data:/var/lib/postgresql/data
-      - ./db/pgvector/001-init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+      - ./deploy/pgvector/001-init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -142,7 +142,7 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-lease-admin-12345}
       MINIO_BUCKET: ${MINIO_BUCKET:-lease}
     volumes:
-      - ./docker/minio:/init:ro
+      - ./deploy/minio:/init:ro
     entrypoint: ["/bin/sh", "/init/init.sh"]
     depends_on:
       minio:
@@ -153,9 +153,9 @@ services:
   web-admin:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
       args:
-        APP_MODULE: web/web-admin
+        APP_MODULE: web-admin
     environment:
       <<: *app-environment
     ports:
@@ -174,9 +174,9 @@ services:
   web-app:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
       args:
-        APP_MODULE: web/web-app
+        APP_MODULE: web-app
     environment:
       <<: *app-environment
       AI_CHAT_API_KEY: ${AI_CHAT_API_KEY:-}
@@ -195,25 +195,6 @@ services:
       retries: 30
       start_period: 40s
     mem_limit: 448m
-    restart: unless-stopped
-
-  rent-house-h5:
-    build:
-      context: ./frontend/rent-house-h5
-      dockerfile: Dockerfile
-      args:
-        VITE_APP_BASE_URL: /
-    ports:
-      - "8082:80"
-    depends_on:
-      web-app:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    mem_limit: 64m
     restart: unless-stopped
 
 volumes:
