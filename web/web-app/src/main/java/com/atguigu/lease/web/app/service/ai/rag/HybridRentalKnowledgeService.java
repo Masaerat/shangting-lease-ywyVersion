@@ -8,19 +8,21 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 @Service
 public class HybridRentalKnowledgeService implements RentalKnowledgeService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(HybridRentalKnowledgeService.class);
 
     private final ObjectProvider<VectorStore> vectorStoreProvider;
     private final LocalRentalKnowledgeService localKnowledge;
@@ -41,8 +43,7 @@ public class HybridRentalKnowledgeService implements RentalKnowledgeService {
     public KnowledgeSearchResult search(String question, String category, int limit) {
         int safeLimit = Math.max(1, Math.min(limit, 10));
         RentalQueryRewriter.RewrittenQuery query = queryRewriter.rewrite(question, category);
-        List<KnowledgeCitation> candidates = new ArrayList<>();
-        boolean vectorSucceeded = false;
+        List<KnowledgeCitation> vectorCandidates = List.of();
         VectorStore vectorStore = vectorStoreProvider.getIfAvailable();
         if (vectorStore != null) {
             try {
@@ -52,24 +53,22 @@ public class HybridRentalKnowledgeService implements RentalKnowledgeService {
                         .similarityThreshold(properties.getSimilarityThreshold())
                         .filterExpression(new FilterExpressionBuilder().ne("namespace", "rooms").build())
                         .build());
-                candidates.addAll(documents.stream().map(this::fromVector).toList());
-                vectorSucceeded = true;
-            } catch (RuntimeException ignored) {
-                vectorSucceeded = false;
+                vectorCandidates = documents == null ? List.of()
+                        : documents.stream().map(this::fromVector).toList();
+            } catch (RuntimeException error) {
+                LOG.warn("Vector knowledge search failed; using lexical fallback: {}",
+                        error.getClass().getSimpleName());
             }
         }
-        candidates.addAll(localKnowledge.search(query.original()).stream()
+        List<KnowledgeCitation> lexicalCandidates = localKnowledge.search(query.original()).stream()
                 .map(this::fromLocal)
-                .toList());
+                .toList();
 
-        Map<String, KnowledgeCitation> unique = new LinkedHashMap<>();
-        candidates.stream()
-                .map(citation -> rerank(citation, query))
-                .sorted(Comparator.comparingDouble(KnowledgeCitation::score).reversed())
-                .forEach(citation -> unique.putIfAbsent(dedupKey(citation), citation));
-        List<KnowledgeCitation> result = unique.values().stream().limit(safeLimit).toList();
+        List<KnowledgeCitation> result = fuse(vectorCandidates, lexicalCandidates, query).stream()
+                .limit(safeLimit)
+                .toList();
         return new KnowledgeSearchResult(
-                query.original(), query.rewritten(), vectorSucceeded ? "HYBRID" : "LOCAL", result);
+                query.original(), query.rewritten(), mode(vectorCandidates, lexicalCandidates), result);
     }
 
     private KnowledgeCitation fromVector(Document document) {
@@ -102,22 +101,57 @@ public class HybridRentalKnowledgeService implements RentalKnowledgeService {
                 0.45);
     }
 
-    private KnowledgeCitation rerank(KnowledgeCitation citation, RentalQueryRewriter.RewrittenQuery query) {
-        double score = citation.score();
-        if (query.category() != null && query.category().equalsIgnoreCase(citation.category())) {
-            score += 0.25;
+    private List<KnowledgeCitation> fuse(List<KnowledgeCitation> vectors,
+                                         List<KnowledgeCitation> lexical,
+                                         RentalQueryRewriter.RewrittenQuery query) {
+        Map<String, FusedCandidate> fused = new LinkedHashMap<>();
+        addRanked(fused, vectors, properties.getVectorWeight());
+        addRanked(fused, lexical, properties.getLexicalWeight());
+        double maximum = (properties.getVectorWeight() + properties.getLexicalWeight())
+                / (Math.max(1, properties.getRrfK()) + 1.0);
+        return fused.values().stream()
+                .map(candidate -> scored(candidate, query, maximum))
+                .sorted(Comparator.comparingDouble(KnowledgeCitation::score).reversed()
+                        .thenComparing(this::dedupKey))
+                .toList();
+    }
+
+    private void addRanked(Map<String, FusedCandidate> fused, List<KnowledgeCitation> citations, double weight) {
+        int rank = 1;
+        for (KnowledgeCitation citation : citations) {
+            String key = dedupKey(citation);
+            double contribution = weight / (Math.max(1, properties.getRrfK()) + rank);
+            fused.compute(key, (ignored, existing) -> existing == null
+                    ? new FusedCandidate(citation, contribution)
+                    : new FusedCandidate(prefer(existing.citation(), citation), existing.rrfScore() + contribution));
+            rank++;
         }
-        String searchable = (citation.chapter() + " " + citation.section() + " " + citation.excerpt())
-                .toLowerCase(Locale.ROOT);
-        long hits = query.terms().stream()
-                .map(term -> term.toLowerCase(Locale.ROOT))
-                .filter(searchable::contains)
-                .count();
-        score += Math.min(0.2, hits * 0.04);
+    }
+
+    private KnowledgeCitation prefer(KnowledgeCitation first, KnowledgeCitation second) {
+        if (first.docId() == null && second.docId() != null) return second;
+        return first;
+    }
+
+    private KnowledgeCitation scored(FusedCandidate candidate,
+                                      RentalQueryRewriter.RewrittenQuery query,
+                                      double maximum) {
+        KnowledgeCitation citation = candidate.citation();
+        double normalized = maximum <= 0 ? 0 : candidate.rrfScore() / maximum;
+        if (query.category() != null && query.category().equalsIgnoreCase(citation.category())) {
+            normalized += properties.getCategoryBoost();
+        }
         return new KnowledgeCitation(
                 citation.chunkId(), citation.docId(), citation.documentName(), citation.category(),
                 citation.chapter(), citation.section(), citation.source(), citation.version(),
-                citation.excerpt(), Math.min(score, 1.0));
+                citation.excerpt(), Math.min(1.0, normalized));
+    }
+
+    private String mode(List<KnowledgeCitation> vectors, List<KnowledgeCitation> lexical) {
+        if (!vectors.isEmpty() && !lexical.isEmpty()) return "HYBRID";
+        if (!vectors.isEmpty()) return "VECTOR";
+        if (!lexical.isEmpty()) return "LOCAL";
+        return "EMPTY";
     }
 
     private String dedupKey(KnowledgeCitation citation) {
@@ -146,5 +180,8 @@ public class HybridRentalKnowledgeService implements RentalKnowledgeService {
 
     private Integer intValue(Object value) {
         return value == null ? null : Integer.valueOf(value.toString());
+    }
+
+    private record FusedCandidate(KnowledgeCitation citation, double rrfScore) {
     }
 }

@@ -53,4 +53,12 @@ public class Knife4jConfiguration {
                 ).
                 build();
     }
+
+    @Bean
+    public GroupedOpenApi aiRentalAgentAPI() {
+        return GroupedOpenApi.builder()
+                .group("AI智能租房")
+                .pathsToMatch("/app/ai/**")
+                .build();
+    }
 }

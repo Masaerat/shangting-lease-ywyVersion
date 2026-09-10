@@ -40,17 +40,21 @@ spring:
       - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
   ai:
     openai:
-      base-url: ${AI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
+      base-url: ${AI_CHAT_BASE_URL:${AI_BASE_URL:https://api.openai.com/v1}}
       api-key: ${AI_CHAT_API_KEY:}
       completions-path: /chat/completions
       embeddings-path: /embeddings
       chat:
+        base-url: ${AI_CHAT_BASE_URL:${AI_BASE_URL:https://api.openai.com/v1}}
+        completions-path: ${AI_CHAT_COMPLETIONS_PATH:/chat/completions}
         options:
-          model: ${AI_CHAT_MODEL:glm-4-flash}
+          model: ${AI_CHAT_MODEL:gpt-5.6-terra}
       embedding:
+        base-url: ${AI_EMBED_BASE_URL:${AI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}}
+        embeddings-path: ${AI_EMBEDDINGS_PATH:/embeddings}
         api-key: ${AI_EMBED_API_KEY:${AI_CHAT_API_KEY:}}
         options:
-          model: ${AI_EMBED_MODEL:embedding-3}
+          model: ${AI_EMBED_MODEL:embedding-2}
           dimensions: ${AI_EMBED_DIM:1024}
     vectorstore:
       pgvector:
@@ -77,7 +81,8 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 knife4j:
-  enable: true
+  # Knife4j 4.5.0 的可选增强器与 Springdoc 2.8.x API 不兼容；UI 和接口调试不依赖该增强器。
+  enable: false
   setting:
     language: zh_cn
 
@@ -97,7 +102,7 @@ app:
     code: ${DEMO_LOGIN_CODE:888888}
   ai:
     agent:
-      primary-model: ${AI_AGENT_PRIMARY_MODEL:${AI_CHAT_MODEL:glm-4-flash}}
+      primary-model: ${AI_AGENT_PRIMARY_MODEL:${AI_CHAT_MODEL:gpt-5.6-terra}}
       fallback-model: ${AI_AGENT_FALLBACK_MODEL:}
       max-steps: ${AI_AGENT_MAX_STEPS:6}
       max-same-tool-calls: ${AI_AGENT_MAX_SAME_TOOL_CALLS:3}
@@ -112,4 +117,14 @@ app:
       top-k: 5
       similarity-threshold: 0.75
       history-turns: 10
+      memory-recent-turns: ${AI_MEMORY_RECENT_TURNS:6}
+      memory-max-recent-chars: ${AI_MEMORY_MAX_RECENT_CHARS:6000}
+      memory-max-context-chars: ${AI_MEMORY_MAX_CONTEXT_CHARS:8000}
+      memory-summary-max-chars: ${AI_MEMORY_SUMMARY_MAX_CHARS:2000}
+      memory-summary-item-max-chars: ${AI_MEMORY_SUMMARY_ITEM_MAX_CHARS:240}
+      memory-message-max-chars: ${AI_MEMORY_MESSAGE_MAX_CHARS:2000}
+      rrf-k: ${AI_RAG_RRF_K:60}
+      vector-weight: ${AI_RAG_VECTOR_WEIGHT:1.0}
+      lexical-weight: ${AI_RAG_LEXICAL_WEIGHT:0.8}
+      category-boost: ${AI_RAG_CATEGORY_BOOST:0.08}
       namespace-default: default

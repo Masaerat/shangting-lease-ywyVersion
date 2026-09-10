@@ -82,7 +82,8 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 knife4j:
-  enable: true
+  # Knife4j 4.5.0 的可选增强器与 Springdoc 2.8.x API 不兼容；UI 和接口调试不依赖该增强器。
+  enable: false
   setting:
     language: zh_cn
 

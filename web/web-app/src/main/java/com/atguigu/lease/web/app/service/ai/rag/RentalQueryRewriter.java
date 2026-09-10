@@ -25,19 +25,20 @@ public class RentalQueryRewriter {
     }
 
     private String detectCategory(String text) {
-        if (containsAny(text, "押金", "保证金", "退押")) return "DEPOSIT";
-        if (containsAny(text, "付款", "月付", "季付", "租金")) return "PAYMENT";
-        if (containsAny(text, "预约", "看房", "到访")) return "APPOINTMENT";
-        if (containsAny(text, "报修", "维修", "故障")) return "REPAIR";
-        if (containsAny(text, "退租", "结算", "违约", "钥匙")) return "CHECKOUT";
-        if (containsAny(text, "入住", "材料", "搬入")) return "MOVE_IN";
+        if (containsAny(text, "押金", "保证金", "退押", "押一付", "担保金")) return "DEPOSIT";
+        if (containsAny(text, "付款", "月付", "季付", "租金", "分期", "交租")) return "PAYMENT";
+        if (containsAny(text, "预约", "看房", "到访", "实地看看", "线下看", "参观房子")) return "APPOINTMENT";
+        if (containsAny(text, "报修", "维修", "故障", "坏了", "漏水", "停电", "修理")) return "REPAIR";
+        if (containsAny(text, "退租", "结算", "违约", "钥匙", "搬走", "不租了", "解约")) return "CHECKOUT";
+        if (containsAny(text, "入住", "材料", "搬入", "搬家", "证件", "身份证")) return "MOVE_IN";
         return null;
     }
 
     private List<String> keywords(String text) {
         List<String> result = new ArrayList<>();
         for (String word : List.of("押金", "付款", "月付", "季付", "预约", "看房",
-                "报修", "维修", "退租", "结算", "违约", "入住", "材料")) {
+                "报修", "维修", "退租", "结算", "违约", "入住", "材料", "保证金",
+                "分期", "交租", "漏水", "停电", "搬走", "解约", "证件", "身份证")) {
             if (text.contains(word)) {
                 result.add(word);
             }

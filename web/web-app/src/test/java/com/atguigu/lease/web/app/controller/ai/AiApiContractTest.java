@@ -6,6 +6,9 @@ import com.atguigu.lease.web.app.custom.interceptor.AuthenticationInterceptor;
 import com.atguigu.lease.web.app.service.ai.RentalChatService;
 import com.atguigu.lease.web.app.service.ai.appointment.AppointmentConfirmationService;
 import com.atguigu.lease.web.app.service.ai.appointment.AppointmentDraftService;
+import com.atguigu.lease.web.app.service.ai.rag.KnowledgeCitation;
+import com.atguigu.lease.web.app.service.ai.rag.KnowledgeSearchResult;
+import com.atguigu.lease.web.app.service.ai.rag.RentalKnowledgeService;
 import com.atguigu.lease.web.app.vo.ai.AiChatMetaVo;
 import com.atguigu.lease.web.app.vo.ai.ChatSseEvent;
 import com.atguigu.lease.web.app.vo.ai.appointment.AppointmentConfirmResponse;
@@ -29,6 +32,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -41,6 +45,7 @@ class AiApiContractTest {
     private RentalChatService chatService;
     private AppointmentDraftService draftService;
     private AppointmentConfirmationService confirmationService;
+    private RentalKnowledgeService knowledgeService;
     private MockMvc mockMvc;
     private String token;
 
@@ -49,12 +54,13 @@ class AiApiContractTest {
         chatService = mock(RentalChatService.class);
         draftService = mock(AppointmentDraftService.class);
         confirmationService = mock(AppointmentConfirmationService.class);
+        knowledgeService = mock(RentalKnowledgeService.class);
 
         AiChatController chatController = new AiChatController();
         ReflectionTestUtils.setField(chatController, "rentalChatService", chatService);
         AiAppointmentController appointmentController =
                 new AiAppointmentController(draftService, confirmationService);
-        mockMvc = standaloneSetup(chatController, appointmentController)
+        mockMvc = standaloneSetup(chatController, appointmentController, new AiRagController(knowledgeService))
                 .addInterceptors(new AuthenticationInterceptor())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -134,5 +140,23 @@ class AiApiContractTest {
                 .andExpect(jsonPath("$.message").value("未登陆"));
 
         verifyNoInteractions(confirmationService);
+    }
+
+    @Test
+    void directRagSearchExposesRealRetrievalModeAndCitations() throws Exception {
+        when(knowledgeService.search("押金怎么退", null, 3)).thenReturn(new KnowledgeSearchResult(
+                "押金怎么退", "押金怎么退 押金 退还条件 费用结算", "LOCAL",
+                java.util.List.of(new KnowledgeCitation(
+                        "local-1", null, "rag-knowledge.md", "DEPOSIT", "押金", "押金",
+                        "rag-knowledge.md", 1, "完成验房和结算后按合同处理。", 0.52))));
+
+        mockMvc.perform(get("/app/ai/rag/search")
+                        .header("access-token", token)
+                        .param("question", "押金怎么退")
+                        .param("limit", "3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.mode").value("LOCAL"))
+                .andExpect(jsonPath("$.data.rewrittenQuery").value(org.hamcrest.Matchers.containsString("退还条件")))
+                .andExpect(jsonPath("$.data.citations[0].category").value("DEPOSIT"));
     }
 }

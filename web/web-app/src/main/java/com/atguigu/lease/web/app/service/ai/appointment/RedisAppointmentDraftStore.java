@@ -1,6 +1,7 @@
 package com.atguigu.lease.web.app.service.ai.appointment;
 
 import com.atguigu.lease.common.utils.JsonUtil;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +18,7 @@ public class RedisAppointmentDraftStore implements AppointmentDraftStore {
     private final StringRedisTemplate redisTemplate;
     private final Clock clock;
 
+    @Autowired
     public RedisAppointmentDraftStore(StringRedisTemplate redisTemplate) {
         this(redisTemplate, Clock.systemUTC());
     }

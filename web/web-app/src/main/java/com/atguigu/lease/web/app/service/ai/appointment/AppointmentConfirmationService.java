@@ -16,6 +16,7 @@ import com.atguigu.lease.web.app.vo.ai.appointment.AppointmentConfirmResponse;
 import org.springframework.dao.DuplicateKeyException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -44,6 +45,7 @@ public class AppointmentConfirmationService {
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
+    @Autowired
     public AppointmentConfirmationService(AppointmentDraftStore draftStore, RoomInfoMapper roomInfoMapper,
                                           ViewAppointmentMapper appointmentMapper,
                                           AiAppointmentIdempotencyMapper idempotencyMapper,

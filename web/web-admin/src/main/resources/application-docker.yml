@@ -29,17 +29,21 @@ spring:
       - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
   ai:
     openai:
-      base-url: ${AI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
+      base-url: ${AI_CHAT_BASE_URL:${AI_BASE_URL:https://api.openai.com/v1}}
       api-key: ${AI_CHAT_API_KEY:}
       completions-path: /chat/completions
       embeddings-path: /embeddings
       chat:
+        base-url: ${AI_CHAT_BASE_URL:${AI_BASE_URL:https://api.openai.com/v1}}
+        completions-path: ${AI_CHAT_COMPLETIONS_PATH:/chat/completions}
         options:
-          model: ${AI_CHAT_MODEL:glm-4-flash}
+          model: ${AI_CHAT_MODEL:gpt-5.6-terra}
       embedding:
+        base-url: ${AI_EMBED_BASE_URL:${AI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}}
+        embeddings-path: ${AI_EMBEDDINGS_PATH:/embeddings}
         api-key: ${AI_EMBED_API_KEY:${AI_CHAT_API_KEY:}}
         options:
-          model: ${AI_EMBED_MODEL:embedding-3}
+          model: ${AI_EMBED_MODEL:embedding-2}
           dimensions: ${AI_EMBED_DIM:1024}
     vectorstore:
       pgvector:
@@ -66,7 +70,8 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 knife4j:
-  enable: true
+  # Knife4j 4.5.0 的可选增强器与 Springdoc 2.8.x API 不兼容；UI 和接口调试不依赖该增强器。
+  enable: false
   setting:
     language: zh_cn
 

@@ -8,6 +8,7 @@ import com.atguigu.lease.web.app.service.ai.agent.AgentObservation;
 import com.atguigu.lease.web.app.service.ai.agent.AgentResult;
 import com.atguigu.lease.web.app.service.ai.agent.AgentStep;
 import com.atguigu.lease.web.app.service.ai.agent.RentalAgentRuntime;
+import com.atguigu.lease.web.app.service.ai.memory.ConversationMemoryService;
 import com.atguigu.lease.web.app.service.ai.rag.KnowledgeCitation;
 import com.atguigu.lease.web.app.service.ai.rag.KnowledgeSearchResult;
 import com.atguigu.lease.web.app.tools.RoomSearchTool;
@@ -78,7 +79,9 @@ class RentalChatServiceImplTest {
                 sink.accept(new ChatSseEvent("done", null));
             }
         };
-        var service = new RentalChatServiceImpl(null, fallback, new RagProperties(), mock(CacheUtil.class), Runnable::run);
+        CacheUtil cache = mock(CacheUtil.class);
+        var service = new RentalChatServiceImpl(null, fallback,
+                new ConversationMemoryService(cache, new RagProperties()), Runnable::run);
         List<ChatSseEvent> events = new ArrayList<>();
 
         service.chat(7L, request("conv-1", "预算2500并说明押金"), events::add);
@@ -91,16 +94,18 @@ class RentalChatServiceImplTest {
 
     @Test
     void sameConversationIdUsesDifferentRedisKeysForDifferentUsers() {
+        CacheUtil cache = mock(CacheUtil.class);
         var service = new RentalChatServiceImpl(null, mock(RentalChatEngine.class),
-                new RagProperties(), mock(CacheUtil.class), Runnable::run);
+                new ConversationMemoryService(cache, new RagProperties()), Runnable::run);
 
         assertThat(service.historyKey(1L, "same")).isNotEqualTo(service.historyKey(2L, "same"));
     }
 
     @Test
     void rejectsUnsafeConversationId() {
+        CacheUtil cache = mock(CacheUtil.class);
         var service = new RentalChatServiceImpl(null, mock(RentalChatEngine.class),
-                new RagProperties(), mock(CacheUtil.class), Runnable::run);
+                new ConversationMemoryService(cache, new RagProperties()), Runnable::run);
 
         assertThatThrownBy(() -> service.chat(1L, request("../../shared", "hello"), event -> { }))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -140,7 +145,8 @@ class RentalChatServiceImplTest {
                 org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
         when(cache.get(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(String.class)))
                 .thenAnswer(invocation -> stored.get());
-        var service = new RentalChatServiceImpl(null, fallback, new RagProperties(), cache, Runnable::run);
+        var service = new RentalChatServiceImpl(null, fallback,
+                new ConversationMemoryService(cache, new RagProperties()), Runnable::run);
         service.chat(7L, request("conv", "第一行\n第二行"), e -> {});
         service.chat(7L, request("conv", "继续"), e -> {});
         var execution = org.mockito.ArgumentCaptor.forClass(RentalChatEngine.ChatExecution.class);
@@ -161,11 +167,14 @@ class RentalChatServiceImplTest {
         when(cache.get(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(String.class)))
                 .thenReturn("用户:预算2500\n顾问:已找到");
         RentalChatEngine fallback = mock(RentalChatEngine.class);
-        new RentalChatServiceImpl(null, fallback, new RagProperties(), cache, Runnable::run)
+        new RentalChatServiceImpl(null, fallback,
+                new ConversationMemoryService(cache, new RagProperties()), Runnable::run)
                 .chat(7L, request("conv", "继续"), e -> {});
         var execution = org.mockito.ArgumentCaptor.forClass(RentalChatEngine.ChatExecution.class);
         org.mockito.Mockito.verify(fallback).chat(execution.capture(), org.mockito.ArgumentMatchers.any());
-        assertThat(execution.getValue().history()).containsExactly("用户:预算2500", "顾问:已找到");
+        assertThat(execution.getValue().history())
+                .anyMatch(line -> line.startsWith("已确认用户条件") && line.contains("2500"))
+                .containsSubsequence("用户:预算2500", "顾问:已找到");
     }
 
     private ChatRequestVo request(String conversationId, String message) {

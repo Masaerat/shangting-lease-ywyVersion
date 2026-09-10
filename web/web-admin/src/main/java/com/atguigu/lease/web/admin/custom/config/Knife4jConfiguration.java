@@ -75,4 +75,12 @@ public class Knife4jConfiguration {
                         "/admin/user/**"
                 ).build();
     }
+
+    @Bean
+    public GroupedOpenApi aiKnowledgeAPI() {
+        return GroupedOpenApi.builder()
+                .group("AI知识库管理")
+                .pathsToMatch("/admin/ai/**")
+                .build();
+    }
 }

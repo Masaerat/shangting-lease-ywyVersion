@@ -33,6 +33,8 @@
         <easycaptcha.version>1.6.2</easycaptcha.version>
         <minio.version>8.2.0</minio.version>
         <knife4j.version>4.5.0</knife4j.version>
+        <!-- Knife4j 4.5.0 默认传递的 springdoc 2.3.0 不兼容 Spring Boot 3.4 / Spring Framework 6.2 -->
+        <springdoc.version>2.8.9</springdoc.version>
         <aliyun.sms.version>2.0.23</aliyun.sms.version>
         <testcontainers.version>2.0.5</testcontainers.version>
         <!-- spring-amqp 版本交给 Spring Boot 3.4 托管,不再手动覆盖 -->
@@ -65,6 +67,13 @@
                 <groupId>com.github.xiaoymin</groupId>
                 <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
                 <version>${knife4j.version}</version>
+            </dependency>
+
+            <!-- 仅覆盖 Knife4j 内部的 OpenAPI 文档引擎版本，不额外引入第二套接口文档。 -->
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+                <version>${springdoc.version}</version>
             </dependency>
 
             <!--JWT登录认证相关-->

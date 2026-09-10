@@ -1,5 +1,7 @@
 # 27公寓 AI 租房顾问闭环实现详解
 
+> 全项目升级历史、当前七工具 Agent、MQ 落库闭环和 36 道面试追问，请先阅读 [升级改造全解与面试手册](agent-rag-mq-interview-handbook.md)。本文主体是早期实现记录。
+
 > 版本提示：本文主体记录早期 V1 闭环，部分 MODEL/前端描述已经过时。当前 Agent Harness、混合 RAG、工具权限和最新面试口径请以 `agent-harness-explained.md`、`rag-evaluation.md` 和 `resume.md` 为准；预约与 Outbox 原理章节仍可作为补充阅读。
 
 > 适用分支：`agentRag`

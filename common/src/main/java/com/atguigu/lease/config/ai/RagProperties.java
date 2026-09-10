@@ -33,6 +33,36 @@ public class RagProperties {
     /** 多轮对话历史保留轮数 */
     private int historyTurns = 10;
 
+    /** 分层记忆中保留原文的最近轮数 */
+    private int memoryRecentTurns = 6;
+
+    /** 最近原文允许占用的最大字符数 */
+    private int memoryMaxRecentChars = 6000;
+
+    /** 注入 Agent 的记忆上下文最大字符数 */
+    private int memoryMaxContextChars = 8000;
+
+    /** 滚动摘要最大字符数 */
+    private int memorySummaryMaxChars = 2000;
+
+    /** 每条进入滚动摘要的消息最大字符数 */
+    private int memorySummaryItemMaxChars = 240;
+
+    /** 单条最近原文最大字符数 */
+    private int memoryMessageMaxChars = 2000;
+
+    /** RRF 常数，越大越弱化头部名次差异 */
+    private int rrfK = 60;
+
+    /** 向量召回在 RRF 中的权重 */
+    private double vectorWeight = 1.0;
+
+    /** 本地词法召回在 RRF 中的权重 */
+    private double lexicalWeight = 0.8;
+
+    /** 分类匹配的归一化加分 */
+    private double categoryBoost = 0.08;
+
     /** 默认 namespace */
     private String namespaceDefault = "default";
 }

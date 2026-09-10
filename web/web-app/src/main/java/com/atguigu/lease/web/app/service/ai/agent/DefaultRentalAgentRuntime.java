@@ -34,6 +34,7 @@ public class DefaultRentalAgentRuntime implements RentalAgentRuntime {
             7. 查询预约进度调用 get_appointment_status；预约编号必须来自确认结果或用户明确提供，不可把房间编号当作预约编号。
             8. 查询通知调用 list_my_notifications。PUBLISHED 仅表示 MQ 接收，DELIVERED 仅表示站内通知已落库，绝不声称短信或邮件送达。
             9. 预约状态问题不是预约政策问题，不必为状态查询检索政策；缺少预约编号先询问。
+            10. 上下文中的“已确认用户条件”来自用户历史表达，可用于理解偏好，但房源价格、库存和业务状态仍必须通过工具核验；本轮用户的新表述优先。
             """;
 
     private final ObjectProvider<ChatModel> chatModelProvider;
@@ -157,7 +158,7 @@ public class DefaultRentalAgentRuntime implements RentalAgentRuntime {
         messages.add(new SystemMessage(SYSTEM_PROMPT));
         StringBuilder user = new StringBuilder();
         if (!context.history().isEmpty()) {
-            user.append("最近对话：\n");
+            user.append("分层对话记忆：\n");
             context.history().forEach(line -> user.append(line).append('\n'));
         }
         user.append("本轮目标：").append(context.goal()).append('\n');

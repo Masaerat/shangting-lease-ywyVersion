@@ -1,4 +1,5 @@
 #!/bin/sh
+# This script is mounted into a Linux container and must keep LF line endings.
 set -eu
 
 alias_name=lease-local
