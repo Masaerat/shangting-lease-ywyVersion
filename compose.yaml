@@ -1,0 +1,224 @@
+name: lease-agent-rag
+
+x-app-environment: &app-environment
+  SPRING_PROFILES_ACTIVE: docker
+  MYSQL_URL: jdbc:mysql://mysql:3306/lease?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf-8&allowPublicKeyRetrieval=true
+  MYSQL_USER: ${MYSQL_USER:-lease}
+  MYSQL_PASSWORD: ${MYSQL_PASSWORD:-lease}
+  REDIS_HOST: redis
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_USER: ${RABBITMQ_USER:-lease}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-lease}
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-lease-admin}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-lease-admin-12345}
+  MINIO_BUCKET: ${MINIO_BUCKET:-lease}
+  PG_URL: jdbc:postgresql://pgvector:5432/${PG_DATABASE:-lease_vec}
+  PG_USER: ${PG_USER:-lease}
+  PG_PASSWORD: ${PG_PASSWORD:-lease}
+  AI_CHAT_BASE_URL: ${AI_CHAT_BASE_URL:-https://api.openai.com/v1}
+  AI_EMBED_BASE_URL: ${AI_EMBED_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
+  AI_CHAT_API_KEY: ${AI_CHAT_API_KEY:-demo-key}
+  AI_EMBED_API_KEY: ${AI_EMBED_API_KEY:-demo-key}
+  AI_CHAT_MODEL: ${AI_CHAT_MODEL:-gpt-5.6-terra}
+  AI_EMBED_MODEL: ${AI_EMBED_MODEL:-embedding-2}
+  AI_EMBED_DIM: ${AI_EMBED_DIM:-1024}
+  AI_MEMORY_RECENT_TURNS: ${AI_MEMORY_RECENT_TURNS:-6}
+  AI_MEMORY_MAX_RECENT_CHARS: ${AI_MEMORY_MAX_RECENT_CHARS:-6000}
+  AI_MEMORY_MAX_CONTEXT_CHARS: ${AI_MEMORY_MAX_CONTEXT_CHARS:-8000}
+  AI_MEMORY_SUMMARY_MAX_CHARS: ${AI_MEMORY_SUMMARY_MAX_CHARS:-2000}
+  AI_MEMORY_SUMMARY_ITEM_MAX_CHARS: ${AI_MEMORY_SUMMARY_ITEM_MAX_CHARS:-240}
+  AI_MEMORY_MESSAGE_MAX_CHARS: ${AI_MEMORY_MESSAGE_MAX_CHARS:-2000}
+  AI_RAG_RRF_K: ${AI_RAG_RRF_K:-60}
+  AI_RAG_VECTOR_WEIGHT: ${AI_RAG_VECTOR_WEIGHT:-1.0}
+  AI_RAG_LEXICAL_WEIGHT: ${AI_RAG_LEXICAL_WEIGHT:-0.8}
+  AI_RAG_CATEGORY_BOOST: ${AI_RAG_CATEGORY_BOOST:-0.08}
+  JAVA_TOOL_OPTIONS: -XX:+UseSerialGC -XX:MaxRAMPercentage=70
+
+x-app-depends-on: &app-depends-on
+  mysql:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  rabbitmq:
+    condition: service_healthy
+  pgvector:
+    condition: service_healthy
+  minio-init:
+    condition: service_completed_successfully
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-lease}
+      MYSQL_USER: ${MYSQL_USER:-lease}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-lease}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-lease-root}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    mem_limit: 320m
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 64m
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-lease}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-lease}
+    ports:
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    mem_limit: 192m
+    restart: unless-stopped
+
+  pgvector:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${PG_DATABASE:-lease_vec}
+      POSTGRES_USER: ${PG_USER:-lease}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-lease}
+    volumes:
+      - pgvector-data:/var/lib/postgresql/data
+      - ./db/pgvector/001-init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 160m
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-lease-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-lease-admin-12345}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-lease-admin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-lease-admin-12345}
+      MINIO_BUCKET: ${MINIO_BUCKET:-lease}
+    volumes:
+      - ./docker/minio:/init:ro
+    entrypoint: ["/bin/sh", "/init/init.sh"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    mem_limit: 64m
+    restart: "no"
+
+  web-admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: web/web-admin
+    environment:
+      <<: *app-environment
+    ports:
+      - "8080:8080"
+    depends_on:
+      <<: *app-depends-on
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    mem_limit: 448m
+    restart: unless-stopped
+
+  web-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: web/web-app
+    environment:
+      <<: *app-environment
+      AI_CHAT_API_KEY: ${AI_CHAT_API_KEY:-}
+      AI_EMBED_API_KEY: ${AI_EMBED_API_KEY:-}
+      DEMO_LOGIN_ENABLED: ${DEMO_LOGIN_ENABLED:-true}
+      DEMO_LOGIN_PHONE: ${DEMO_LOGIN_PHONE:-13800000000}
+      DEMO_LOGIN_CODE: ${DEMO_LOGIN_CODE:-888888}
+    ports:
+      - "8081:8081"
+    depends_on:
+      <<: *app-depends-on
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    mem_limit: 448m
+    restart: unless-stopped
+
+  rent-house-h5:
+    build:
+      context: ./frontend/rent-house-h5
+      dockerfile: Dockerfile
+      args:
+        VITE_APP_BASE_URL: /
+    ports:
+      - "8082:80"
+    depends_on:
+      web-app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 64m
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+  redis-data:
+  rabbitmq-data:
+  pgvector-data:
+  minio-data:

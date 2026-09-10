@@ -14,9 +14,19 @@ import java.util.Date;
 public class AppointmentMessage {
 
     /**
+     * Outbox事件ID，用于消费者幂等
+     */
+    private Long eventId;
+
+    /**
      * 预约ID
      */
     private Long appointmentId;
+
+    /**
+     * 房间ID
+     */
+    private Long roomId;
 
     /**
      * 用户ID

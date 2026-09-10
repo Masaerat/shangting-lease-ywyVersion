@@ -3,6 +3,7 @@ package com.atguigu.lease.web.app.mapper;
 import com.atguigu.lease.model.entity.ViewAppointment;
 import com.atguigu.lease.web.app.vo.appointment.AppointmentItemVo;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
@@ -15,6 +16,13 @@ import java.util.List;
 public interface ViewAppointmentMapper extends BaseMapper<ViewAppointment> {
 
     List<AppointmentItemVo> listItemByUserId(Long userId);
+
+    @Select("""
+            SELECT COUNT(*) FROM view_appointment
+            WHERE user_id = #{userId} AND room_id = #{roomId}
+              AND appointment_status = 1 AND is_deleted = 0
+            """)
+    long countActiveByUserAndRoom(Long userId, Long roomId);
 }
 
 

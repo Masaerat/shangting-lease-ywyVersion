@@ -1,79 +1,83 @@
-# AI Rental Agent API
+# AI 租房助手 API
 
-## POST `/app/ai/chat`
+2026-09-06 新增预约投递状态、站内通知、已读接口及结构化 SSE 事件，见 [Agent / MQ 闭环接口补充](mq-closed-loop.md)。原草稿/确认接口保持兼容。
 
-Ask the AI rental advisor a natural-language room search or rental policy question.
+所有业务接口使用 `/app` 前缀。除登录外，请求头必须携带：
 
-### Authentication
+```text
+access-token: <登录返回的 JWT>
+```
 
-This endpoint is under `/app/**`, so it uses the existing app `access-token` interceptor.
+统一 JSON 响应为 `{ "code": 200, "message": "成功", "data": ... }`。
 
-### Request
+## 演示登录
+
+`POST /app/login`
 
 ```json
 {
-  "sessionId": "optional-session-id",
-  "message": "帮我找 2000 左右的房子，并说明押金怎么退",
-  "preferences": {
-    "provinceId": 1,
-    "cityId": 1,
-    "districtId": 1,
-    "minRent": 1600,
-    "maxRent": 2400,
-    "paymentTypeId": 1,
-    "orderType": "asc"
-  }
+  "phone": "13800000000",
+  "code": "888888"
 }
 ```
 
-### Fields
+固定验证码只在 `app.demo-login.enabled=true` 时对演示手机号生效。
 
-- `sessionId`: optional conversation id. If omitted, the server returns a generated id.
-- `message`: required user message, max 1000 characters.
-- `preferences`: optional structured search filters.
+## SSE 对话
 
-### Response
+`POST /app/ai/chat`，响应类型为 `text/event-stream`。
 
 ```json
 {
-  "code": 200,
-  "message": "success",
-  "data": {
-    "sessionId": "optional-session-id",
-    "answer": "我按你的描述筛选了可租房源...",
-    "recommendedRooms": [
-      {
-        "roomId": 101,
-        "roomNumber": "A101",
-        "rent": 2100,
-        "apartmentName": "尚庭公寓",
-        "address": "浦东新区张江路100号",
-        "reason": "尚庭公寓月租金约2100元...",
-        "labels": ["近地铁", "采光好"]
-      }
-    ],
-    "citations": [
-      {
-        "title": "押金与退还",
-        "category": "费用规则",
-        "source": "docs/ai-rental-agent/rag-knowledge.md",
-        "snippet": "押金用于覆盖租期内可能产生的房屋损坏..."
-      }
-    ],
-    "suggestedActions": [
-      "查看推荐房源详情",
-      "选择意向房源后提交预约看房"
-    ]
-  }
+  "conversationId": "demo-conversation",
+  "message": "预算2500元，并说明押金怎么退"
 }
 ```
 
-### Error Cases
+服务端发送名为 `chat` 的 SSE 事件，每个 `data` 是一个 `ChatSseEvent`：
 
-- Empty `message`: returns the existing global error response for `PARAM_ERROR`.
-- Overlong `message`: returns the existing global error response for `PARAM_ERROR`.
-- Invalid or missing app token: follows existing `/app/**` authentication behavior.
+| `type` | `payload` |
+| --- | --- |
+| `meta` | `{ mode: "MODEL" | "FALLBACK", conversationId, provider, traceId }` |
+| `message` | 增量回答文本 |
+| `recommendations` | `{ roomId, apartmentId, apartment, roomNumber, rent }[]` |
+| `citations` | `{ chunkId, documentName, category, chapter, section, source, version, excerpt, score }[]` |
+| `trajectory` | MODEL 模式可选的脱敏执行轨迹 `{ step, model, tool, status, elapsedMs, resultCount, errorType }[]` |
+| `done` | `{ traceId, suggestedAction: "SELECT_ROOM" | "CONFIRM_APPOINTMENT" | "NONE" }` |
+| `error` | 可展示的错误信息 |
 
-### Compatibility
+MODEL 与 FALLBACK 使用同一套事件外壳，客户端不解析模型原始 tool call。Agent 最多调用草稿工具，正式预约只能由下方确认接口写入；普通找房聊天不会创建预约。
 
-No existing app endpoint request or response shape is changed.
+## 预约草稿
+
+`POST /app/ai/appointments/draft`
+
+```json
+{
+  "roomId": 930001,
+  "name": "演示用户",
+  "phone": "13800000000",
+  "appointmentTime": "2026-08-06T14:00:00",
+  "additionalInfo": "希望提前电话联系"
+}
+```
+
+响应包含 `confirmationToken`、`expiresAt` 和规范化后的草稿。草稿保存在 Redis，10 分钟失效；此步骤不会写入预约表。
+
+## 明确确认
+
+`POST /app/ai/appointments/confirm`
+
+```json
+{
+  "confirmationToken": "<draft token>"
+}
+```
+
+响应包含 `appointmentId` 和 `idempotentReplay`。首次确认在同一 MySQL 事务中写入预约、幂等记录和 Outbox；相同用户重放同一 token 返回原预约 ID。
+
+## 查询结果
+
+`GET /app/appointment/listItem`
+
+返回当前登录用户的看房预约列表。H5 确认成功后跳转到 `/myAppointment?appointmentId=<id>`。

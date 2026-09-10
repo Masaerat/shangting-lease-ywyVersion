@@ -1,0 +1,25 @@
+spring:
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+  rabbitmq:
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+
+app:
+  outbox:
+    enabled: true
+    fixed-delay-ms: 1000
+    initial-delay-ms: 2000
+  ai:
+    agent:
+      primary-model: ${AI_AGENT_PRIMARY_MODEL:}
+      fallback-model: ${AI_AGENT_FALLBACK_MODEL:}
+      max-steps: ${AI_AGENT_MAX_STEPS:6}
+      max-same-tool-calls: ${AI_AGENT_MAX_SAME_TOOL_CALLS:3}
+      timeout-ms: ${AI_AGENT_TIMEOUT_MS:15000}
+      tool-timeout-ms: ${AI_AGENT_TOOL_TIMEOUT_MS:3000}
+      trajectory-enabled: ${AI_AGENT_TRAJECTORY_ENABLED:true}

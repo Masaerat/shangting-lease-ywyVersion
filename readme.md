@@ -6,6 +6,29 @@
 
 后台**管理系统**面向**管理员**，提供公寓（房源）管理、租赁管理、用户管理等**功能**。
 
+## AI 租房助手闭环
+
+面试版核心文档：`docs/ai-rental-agent/agent-harness-explained.md`、`docs/ai-rental-agent/rag-evaluation.md`、`docs/ai-rental-agent/resume.md`。
+
+`agentRag` 分支在原有业务上增加了可降级的 AI 找房闭环：认证 SSE 对话、MySQL 真实房源推荐、租房知识引用、Redis 多轮历史、预约草稿与显式二次确认、幂等写入，以及 Transactional Outbox 可靠事件投递。没有模型 Key 时使用本地规则和版本化知识完成演示。
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+.\scripts\verify-compose.ps1
+.\scripts\smoke-rental-agent.ps1
+```
+
+服务地址：Admin `http://localhost:8080`，App API `http://localhost:8081`，H5 `http://localhost:8082`。演示登录为 `13800000000 / 888888`，固定验证码仅在 Docker demo 配置中启用。
+
+接口说明见 `docs/ai-rental-agent/api.md`，最新验收状态见 `docs/ai-rental-agent/test-report.md`。
+
+以下命令会删除 Docker 演示数据卷，只能在明确需要重置脱敏演示数据时手动执行：
+
+```powershell
+docker compose down --volumes
+```
+
 # 2.后台管理系统
 
 ## 体验地址

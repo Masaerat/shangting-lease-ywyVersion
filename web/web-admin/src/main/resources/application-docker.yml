@@ -1,0 +1,93 @@
+server:
+  port: 8080
+
+spring:
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${MYSQL_URL:jdbc:mysql://mysql:3306/lease?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf-8&allowPublicKeyRetrieval=true}
+    username: ${MYSQL_USER:lease}
+    password: ${MYSQL_PASSWORD:lease}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:lease}
+    password: ${RABBITMQ_PASSWORD:lease}
+    virtual-host: /
+    publisher-confirm-type: correlated
+    publisher-returns: true
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
+  ai:
+    openai:
+      base-url: ${AI_CHAT_BASE_URL:${AI_BASE_URL:https://api.openai.com/v1}}
+      api-key: ${AI_CHAT_API_KEY:}
+      completions-path: /chat/completions
+      embeddings-path: /embeddings
+      chat:
+        base-url: ${AI_CHAT_BASE_URL:${AI_BASE_URL:https://api.openai.com/v1}}
+        completions-path: ${AI_CHAT_COMPLETIONS_PATH:/chat/completions}
+        options:
+          model: ${AI_CHAT_MODEL:gpt-5.6-terra}
+      embedding:
+        base-url: ${AI_EMBED_BASE_URL:${AI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}}
+        embeddings-path: ${AI_EMBEDDINGS_PATH:/embeddings}
+        api-key: ${AI_EMBED_API_KEY:${AI_CHAT_API_KEY:}}
+        options:
+          model: ${AI_EMBED_MODEL:embedding-2}
+          dimensions: ${AI_EMBED_DIM:1024}
+    vectorstore:
+      pgvector:
+        dimensions: ${AI_EMBED_DIM:1024}
+
+mybatis-plus:
+  mapper-locations: classpath*:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://minio:9000}
+  access-key: ${MINIO_ACCESS_KEY:lease-admin}
+  secret-key: ${MINIO_SECRET_KEY:lease-admin-12345}
+  bucket-name: ${MINIO_BUCKET:lease}
+
+aliyun:
+  sms:
+    access-key-id: ${ALIYUN_SMS_ACCESS_KEY_ID:}
+    access-key-secret: ${ALIYUN_SMS_ACCESS_KEY_SECRET:}
+    endpoint: dysmsapi.aliyuncs.com
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+knife4j:
+  # Knife4j 4.5.0 的可选增强器与 Springdoc 2.8.x API 不兼容；UI 和接口调试不依赖该增强器。
+  enable: false
+  setting:
+    language: zh_cn
+
+app:
+  datasource:
+    pg:
+      url: ${PG_URL:jdbc:postgresql://pgvector:5432/lease_vec}
+      username: ${PG_USER:lease}
+      password: ${PG_PASSWORD:lease}
+  ai:
+    rag:
+      chunk-size: 800
+      min-chunk-size-chars: 350
+      min-chunk-length-to-embed: 5
+      max-num-chunks: 10000
+      top-k: 5
+      similarity-threshold: 0.75
+      history-turns: 10
+      namespace-default: default

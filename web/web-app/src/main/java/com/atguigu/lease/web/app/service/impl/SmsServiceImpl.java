@@ -4,14 +4,16 @@ import com.aliyun.dysmsapi20170525.models.SendSmsRequest;
 //import com.aliyun.teaopenapi.Client;
 import com.aliyun.dysmsapi20170525.Client;
 import com.atguigu.lease.web.app.service.SmsService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class SmsServiceImpl implements SmsService {
 
-    @Autowired
-    private Client client;
+    private final Client client;
+
+    public SmsServiceImpl(Client client) {
+        this.client = client;
+    }
 
     /**
      * 发送短信功能。

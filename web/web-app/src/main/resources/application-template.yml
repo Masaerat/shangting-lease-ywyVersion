@@ -1,0 +1,116 @@
+# ============================================================
+# web-app (C 端) 配置模板 —— 请把尖括号 <...> 占位符替换为真实值
+# 仅有占位符的项不填会导致对应功能/启动失败(如 MySQL 密码)
+# ============================================================
+server:
+  port: 8081
+  servlet:
+    context-path: /
+
+spring:
+  # 升级 Spring Boot 3.4 后启用虚拟线程(SSE / IO 密集调用受益)
+  threads:
+    virtual:
+      enabled: true
+
+  # MySQL(主数据源,MyBatis-Plus 使用)
+  datasource:
+    url: jdbc:mysql://localhost:3306/lease?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf-8&allowPublicKeyRetrieval=true
+    username: root
+    password: <你的MySQL密码>
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # Redis(Boot 3 起前缀为 spring.data.redis;CacheUtil 用)
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      database: 0
+
+  # RabbitMQ(预约延迟队列用)
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
+  # Spring AI:OpenAI 兼容协议(GLM 等)+ pgvector 向量库
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
+  ai:
+    openai:
+      base-url: <你的AI_BASE_URL>          # 如 https://open.bigmodel.cn/api/paas/v4
+      api-key: <你的AI_API_KEY>
+      chat:
+        options:
+          model: <你的AI_CHAT_MODEL>        # 如 glm-4-flash
+      embedding:
+        options:
+          model: <你的AI_EMBED_MODEL>       # 如 embedding-3
+    vectorstore:
+      pgvector:
+        dimensions: <你的AI_EMBED_DIM>      # 与 embedding 模型一致(如 1024)
+
+# MyBatis-Plus
+mybatis-plus:
+  mapper-locations: classpath*:mapper/*.xml
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    map-underscore-to-camel-case: true
+
+# MinIO 对象存储(图形/文件上传;未配 endpoint 则相关 bean 不启用)
+minio:
+  endpoint: http://localhost:9000
+  access-key: <你的MinIO AccessKey>
+  secret-key: <你的MinIO SecretKey>
+  bucket-name: lease
+
+# 阿里云短信(验证码发送)
+aliyun:
+  sms:
+    access-key-id: <你的阿里云 AccessKeyId>
+    access-key-secret: <你的阿里云 AccessKeySecret>
+    endpoint: dysmsapi.aliyuncs.com
+
+# Knife4j / OpenAPI 文档:访问 http://localhost:8081/doc.html
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+knife4j:
+  # Knife4j 4.5.0 的可选增强器与 Springdoc 2.8.x API 不兼容；UI 和接口调试不依赖该增强器。
+  enable: false
+  setting:
+    language: zh_cn
+
+# AI / RAG 业务参数 + 向量库第二数据源(PgVector);未配 app.datasource.pg.url 则相关 bean 不启用
+app:
+  datasource:
+    pg:
+      url: <你的PG_URL>                    # 如 jdbc:postgresql://localhost:5432/lease_vec
+      username: <你的PG_USER>
+      password: <你的PG_PASSWORD>
+  ai:
+    rag:
+      chunk-size: 800
+      min-chunk-size-chars: 350
+      min-chunk-length-to-embed: 5
+      max-num-chunks: 10000
+      top-k: 5
+      similarity-threshold: 0.75
+      history-turns: 10
+      memory-recent-turns: 6
+      memory-max-recent-chars: 6000
+      memory-max-context-chars: 8000
+      memory-summary-max-chars: 2000
+      memory-summary-item-max-chars: 240
+      memory-message-max-chars: 2000
+      rrf-k: 60
+      vector-weight: 1.0
+      lexical-weight: 0.8
+      category-boost: 0.08
+      namespace-default: default
