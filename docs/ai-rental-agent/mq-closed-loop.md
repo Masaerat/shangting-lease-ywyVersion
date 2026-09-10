@@ -4,7 +4,7 @@
 
 ## 范围与真实能力
 
-Spring AI 仍为 1.0.0，无 MCP、无前端改动。本次增加的是站内通知，不是短信或邮件网关。模型调用只负责查询与准备草稿，业务提交始终需要用户显式确认。
+Spring AI 为 1.0.0，当前范围不包含 MCP。本链路实现的是站内通知，不是短信或邮件网关。模型调用只负责查询与准备草稿，业务提交始终需要用户显式确认。
 
 ```text
 Agent search / RAG / draft → SSE appointment_draft
@@ -18,7 +18,7 @@ Agent search / RAG / draft → SSE appointment_draft
               REST 查询 / Agent 查询工具 / 无模型规则查询
 ```
 
-未授权启动服务，所以真实 RabbitMQ + MySQL + Redis 联调不在本轮执行范围内；不能把编译或内存数据库测试称为真实链路已运行成功。
+当前验证范围和明确排除项见[最终验证记录](verification.md)。不能把编译、Mock 或 H2 测试称为真实 RabbitMQ、MySQL 和 Redis 链路已经完成故障演练。
 
 ## Agent 接口
 
@@ -66,9 +66,9 @@ Agent search / RAG / draft → SSE appointment_draft
 - Outbox 每次认领一条，30 秒租约，最多等待 10 秒 confirm。完成和失败更新都带 attempts 代数条件，旧发布器不能覆盖新认领状态。网络发送自身仍可能阻塞、进程仍可能暂停，因此仍需数据库幂等；不声称 exactly-once。
 - JSON 转换器同时作为 Spring bean 供监听器使用，并用于 RabbitTemplate；业务 JdbcTemplate 显式绑定 MySQL，向量库显式绑定 pgJdbcTemplate。
 - 模型失败且已经请求过工具时返回 PARTIAL 轨迹与已有观察，不重跑工具循环。主/备模型共享时间和模型步数预算。取消线程不保证撤销外部操作；草稿最终仍依靠 TTL 与显式确认保护。
-- 聊天历史改为 JSON 数组保留多行，兼容旧换行文本，Redis 失败时降级为无历史；未实现跨实例会话并发串行化或长期记忆。
+- 对话记忆使用“结构化状态 + 历史摘要 + 最近消息”，按完整轮次压缩并兼容旧格式；Redis 失败时降级为无历史。条带锁只保证单 JVM 内同会话串行，多实例仍需 Redis Lua/CAS 或分布式锁。
 
-## 部署前必须检查（本轮没有执行）
+## 部署前必须检查
 
 1. 备份并通过现有 Flyway 流程应用 `V5__user_notification.sql`，不要修改已经执行的 V1–V4。该迁移在 web-app 中；web-admin 与 web-app 共用数据库和消费者，必须先迁移、再同时切换兼容代码，不能让旧消费者继续抢消息。
 2. 保持 publisher-confirm-type=correlated、publisher-returns=true、mandatory=true，监听器必须 AUTO 或等价的“提交后 ACK”，不能设 NONE。
@@ -94,6 +94,6 @@ Agent search / RAG / draft → SSE appointment_draft
 
 H2 仅用于离线验证 SQL 幂等/权限/状态逻辑，不能替代 MySQL 方言与锁行为验收。
 
-待用户允许启动测试容器后，单独执行 `RentalAgentClosedLoopIT`：找房与 RAG → 创建草稿 → 确认及重复确认 → 发布前 PENDING/零通知 → RabbitMQ 发布/消费 → REST DELIVERED → Agent 查询 → Broker 重复投递 → 唯一通知与幂等已读。该 IT 会启动随机端口应用和 MySQL/Redis/RabbitMQ 测试容器，**本轮没有运行**。
+`RentalAgentClosedLoopIT` 用于验证：找房与 RAG → 创建草稿 → 确认及重复确认 → 发布前 PENDING/零通知 → RabbitMQ 发布/消费 → REST DELIVERED → Agent 查询 → Broker 重复投递 → 唯一通知与幂等已读。该 IT 会启动随机端口应用和 MySQL/Redis/RabbitMQ 测试容器，不包含在当前 96 项非集成回归中；只有取得实际测试报告后才能声称这条容器链路已经通过。
 
 另有 `AppointmentOutboxPublisherIT` 验证 Broker 暂停/恢复；真实消息失败重放、混合版本升级与消费者宕机测试仍需在测试环境验收。

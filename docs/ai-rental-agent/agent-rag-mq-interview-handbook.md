@@ -1778,8 +1778,7 @@ Agent → Draft → Confirm → MySQL Transaction → Outbox → RabbitMQ → No
 - `common/src/main/java/com/atguigu/lease/notification/AppointmentNotificationStore.java`
 - `web/web-app/src/main/resources/db/migration/V5__user_notification.sql`
 - [MQ 闭环部署与重放说明](mq-closed-loop.md)
-- [2026-09-06 验证记录](verification-2026-09-06.md)
-- [RAG 评测说明](rag-evaluation.md)
+- [最终验证记录](verification.md)
 - [分层记忆与 RAG 评测说明](context-memory-and-rag-evaluation.md)
 - [API 说明](api.md)
 
